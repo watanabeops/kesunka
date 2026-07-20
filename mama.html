@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<!--
+    ============================================================================
+    KESUNKA MAMA（旧: KESUNKA 保護者ビュー） - 変更履歴 (Changelog)
+    ============================================================================
+
+    [v1.0.0] (Initial Release)
+      KESUNKA（勉強ログアプリ、旧StudyLog）側で「共有」をオンにした際に送信される
+      要約データ（今日/週の合計時間・目標達成率・連続記録・直近7日間の分数）
+      をFirestoreからリアルタイムに購読して表示する、閲覧専用のページ。
+
+      - 書き込み機能は一切持たない（閲覧専用）。
+      - 科目名・メモなど詳細情報は表示しない（KESUNKA側もこれらは送信しない）。
+      - Firebase設定・共有コードは、開いているブラウザのlocalStorageにのみ
+        保存され、他のサーバーには送信されない。
+
+    [v1.0.1] (KESUNKA Rebrand)
+      - アプリ名の変更に伴い、画面表記を「StudyLog」から「KESUNKA」に更新。
+        内部のlocalStorageキー名・Firestoreコレクション名（studylog_〜）は
+        本体アプリ側と合わせ、互換性・安全のため変更していない。
+
+    [v1.0.2] (KESUNKA MAMA Rebrand)
+      - このページ名を「KESUNKA 保護者ビュー」から「KESUNKA MAMA」に変更。
+        内部のlocalStorageキー名・Firestoreコレクション名（studylog_〜）は
+        互換性・安全のため変更していない（見た目には影響しない）。
+        本体アプリ（KESUNKA）側の名称・データ仕様に変更はない。
+
+    [v1.0.3] (Subject Breakdown)
+      - 科目別の学習時間内訳を表示する機能を追加。
+        「今日の学習時間」パネルに今日の科目別チップを、
+        新設した「科目別の学習時間（直近7日）」パネルに週の科目別バーを表示する。
+      - これに伴い、KESUNKA側から共有されるデータに科目名が含まれるようになった
+        （v1.0.2までは合計時間・目標達成率・連続記録のみ）。メモ・日付単位の
+        詳細は引き続き送信されない。
+
+    [v1.0.4] (Icon)
+      - ロゴSVG（本の絵柄）をファビコンとして埋め込み（data URI(base64)として
+          <head>内に直接埋め込み）。元SVGの<style>クラス定義は、グローバルCSSとの
+          クラス名衝突を避けるため、各要素にfill属性を直接インライン化して取り込んだ。
+      - 同じロゴSVGを、ヘッダーのタイトル文字列の前にインラインSVGとして表示。
+      - ヘッダーの見出しを、本体アプリ（KESUNKA）と同じ表記スタイルに統一。
+        「KESUNKA MAMA」＋別枠の「v1.0.4」から、「kesunka mama v.1.0.4」として
+        バージョンバッジ1つの枠内にまとめて表示するよう変更。
+
+    ============================================================================
+-->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>KESUNKA MAMA</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NTAgNDUwIj4KICA8Zz4KICAgIDxyZWN0IGZpbGw9IiNiOTNlMzEiIHdpZHRoPSI0NTAiIGhlaWdodD0iNDUwIiByeD0iNzguOTUiIHJ5PSI3OC45NSIvPgogICAgPHBhdGggZmlsbD0iI2U5OWY4NyIgZD0iTTc4Ljk1LDBoMjkyLjFjNDMuNTcsMCw3OC45NSwzNS4zOCw3OC45NSw3OC45NXYyNzAuNjJjMCw0My41Ny0zNS4zOCw3OC45NS03OC45NSw3OC45NUg3OC45NWMtNDMuNTcsMC03OC45NS0zNS4zOC03OC45NS03OC45NVY3OC45NUMwLDM1LjM4LDM1LjM4LDAsNzguOTUsMFoiLz4KICAgIDxyZWN0IGZpbGw9IiNmN2RkZDEiIHdpZHRoPSI0NTAiIGhlaWdodD0iNDA0LjgzIiByeD0iNzguOTUiIHJ5PSI3OC45NSIvPgogICAgPHBhdGggZmlsbD0iI2U5OWY4NyIgZD0iTTQ1MCwzMDQuNzJjMCw0Mi4wOC00MS4zOSw3Mi42OC04My40Nyw3Mi42OEgxNS43OXY2LjI3aDM1NS4yNmM0My40MiwwLDc4Ljk1LTM1LjUzLDc4Ljk1LTc4Ljk1aDBaIi8+CiAgICA8cGF0aCBmaWxsPSIjZTk5Zjg3IiBkPSJNNDUwLDI3NS45NGMwLDQyLjA4LTQxLjM5LDcyLjY4LTgzLjQ3LDcyLjY4SDE1Ljc5djYuMjdoMzU1LjI2YzQzLjQyLDAsNzguOTUtMzUuNTMsNzguOTUtNzguOTVoMFoiLz4KICAgIDxwYXRoIGZpbGw9IiNlOTlmODciIGQ9Ik00NTAsMjQ3LjE1YzAsNDIuMDgtNDEuMzksNzIuNjgtODMuNDcsNzIuNjhIMTUuNzl2Ni4yN2gzNTUuMjZjNDMuNDIsMCw3OC45NS0zNS41Myw3OC45NS03OC45NWgwWiIvPgogICAgPHBhdGggZmlsbD0iI2I5M2UzMSIgZD0iTTEwMC42Niw0MjguNTFjLTQzLjQyLDAtNzguOTUtMjkuMzYtNzguOTUtNjUuMjRzMzUuNTMtNjUuMjQsNzguOTUtNjUuMjRoMjcwLjM5YzQzLjQyLDAsNzguOTUtMzUuNTMsNzguOTUtNzguOTVWNzguOTVjMC00My40Mi0zNS41My03OC45NS03OC45NS03OC45NUg3OC45NUMzNS41MywwLDAsMzUuNTMsMCw3OC45NXYyOTIuMTFjMCw0My40MiwzNS41Myw3OC45NSw3OC45NSw3OC45NWg1My4yOWM0My40MiwwLDc4Ljk1LTQuODMsNzguOTUtMTAuNzRzLTM1LjUzLTEwLjc0LTc4Ljk1LTEwLjc0aC0zMS41OFoiLz4KICAgIDxwYXRoIGZpbGw9IiNkOTRiM2IiIGQ9Ik0zNzEuMDUsMEg3OC45NWMtMTQuOTksMC0yOC45OSw0LjMxLTQwLjk2LDExLjY0djI4My43YzEzLjQ3LTEwLjEsMzAuNDMtMTYuMTksNDguODUtMTYuMTloMjg0LjIxYzQzLjQyLDAsNzguOTUtMzUuNTMsNzguOTUtNzguOTV2LTEyMS4yNWMwLTQzLjQyLTM1LjUzLTc4Ljk1LTc4Ljk1LTc4Ljk1WiIvPgogIDwvZz4KICA8cGF0aCBmaWxsPSIjZjFjNDBmIiBkPSJNMTIwLjI4LDI1MC40MWMxNi41NS0yLjg4LDE3LjI2LTEzLjMxLDE3LjI2LTM3LjA1VjY3LjdjMC0yMy43NC0uNzItMzQuMTctMTcuMjYtMzcuMDV2LTEwLjA3aDEwOC42MnYxMC4wN2MtMTYuNTUsMi44OC0xNy4yNiwxMy4zMS0xNy4yNiwzNy4wNXY0MWwxNC4zOS0xNC43NWMyNi42Mi0yNy4zNCw0Mi44LTM5LjkyLDQyLjgtNTEuNDMsMC02LjExLTMuOTYtMTAuMDctMTEuNTEtMTEuODd2LTEwLjA3aDEwMS40M3YxMC4wN2MtMjAuMTQsMS4wOC00Ni40LDE0Ljc1LTcwLjUsMzcuNzdsLTE1LjgzLDE0Ljc1YzI0LjgyLDIwLjUsNDYuNzYsNTUuMzksNjQuNzQsMTA1Ljc1LDEyLjIzLDMzLjgxLDEyLjk1LDU2LjExLDM3LjA1LDYxLjVsLS43MiwxMC4wN2gtMTA5LjM0di0xMC4wN2M3LjU1LTEuNDQsMTAuMDctNS4zOSwxMC4wNy0xMy42NywwLTE4LjM0LTE0Ljc1LTYxLjUtNTAuMzUtMTA2LjQ2bC0xMi4yMyw4Ljk5djc0LjA5YzAsMjMuNzQuNzIsMzQuMTcsMTcuMjYsMzcuMDV2MTAuMDdoLTEwOC42MnYtMTAuMDdaIi8+Cjwvc3ZnPg==">
+<style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    :root {
+        --bg-color: #f1f5f9;
+        --panel-bg: #ffffff;
+        --border-color: #e2e8f0;
+        --text-main: #1e293b;
+        --text-muted: #64748b;
+        --accent-color: #3498db;
+        --accent-hover: #2980b9;
+        --green-color: #2ecc71;
+        --danger-color: #ef8177;
+        --danger-hover: #e74c3c;
+        --textarea-bg: #fafafa;
+        --textarea-focus-bg: #ffffff;
+        --goal-track-bg: #e2e8f0;
+        --toast-bg: #34495e;
+        --toast-text: #ecf0f1;
+    }
+
+    [data-theme="dark"] {
+        --bg-color: #0f172a;
+        --panel-bg: #1e293b;
+        --border-color: #334155;
+        --text-main: #f8fafc;
+        --text-muted: #94a3b8;
+        --accent-color: #3498db;
+        --accent-hover: #5dade2;
+        --green-color: #2ecc71;
+        --danger-color: #c0605a;
+        --danger-hover: #e74c3c;
+        --textarea-bg: #0f172a;
+        --textarea-focus-bg: #1e293b;
+        --goal-track-bg: #334155;
+        --toast-bg: #2c3e50;
+        --toast-text: #ecf0f1;
+    }
+
+    body {
+        font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-main);
+        margin: 0;
+        padding: 20px;
+        padding-top: max(20px, env(safe-area-inset-top));
+        padding-bottom: max(20px, env(safe-area-inset-bottom));
+        padding-left: max(20px, env(safe-area-inset-left));
+        padding-right: max(20px, env(safe-area-inset-right));
+        min-height: 100vh;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    input, textarea, select { font-size: 16px; }
+
+    .wrap {
+        max-width: 640px;
+        margin: 0 auto;
+    }
+
+    header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        row-gap: 8px;
+    }
+
+    h1 {
+        font-size: 20px;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .kesunka-icon {
+        width: 28px;
+        height: 28px;
+        vertical-align: middle;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+
+    .version-badge {
+        font-size: 12px;
+        color: var(--text-muted);
+        font-weight: bold;
+        background-color: var(--border-color);
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-family: monospace;
+    }
+
+    .header-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .theme-control, .settings-trigger {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text-muted);
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        padding: 6px 12px;
+        border-radius: 20px;
+        cursor: pointer;
+        min-height: 32px;
+    }
+
+    .panel {
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        padding: 20px;
+        margin-bottom: 16px;
+    }
+
+    .setup-panel label {
+        display: block;
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+        margin-top: 14px;
+        font-weight: bold;
+    }
+
+    .setup-panel label:first-of-type { margin-top: 0; }
+
+    .setup-panel textarea,
+    .setup-panel input {
+        width: 100%;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 10px 12px;
+        background: var(--textarea-bg);
+        color: var(--text-main);
+        outline: none;
+        font-family: inherit;
+    }
+
+    .setup-panel textarea:focus,
+    .setup-panel input:focus {
+        border-color: var(--accent-color);
+        background: var(--textarea-focus-bg);
+    }
+
+    .setup-panel textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
+
+    .setup-note {
+        font-size: 12px;
+        color: var(--text-muted);
+        line-height: 1.7;
+        margin-bottom: 4px;
+    }
+
+    .btn {
+        background-color: var(--accent-color);
+        color: white;
+        border: none;
+        padding: 10px 18px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        min-height: 42px;
+        transition: background 0.2s;
+    }
+    .btn:hover { background-color: var(--accent-hover); }
+
+    .btn-outline {
+        background: transparent;
+        border: 1px solid var(--border-color);
+        color: var(--text-main);
+    }
+    .btn-outline:hover { border-color: var(--accent-color); color: var(--accent-color); }
+
+    .setup-actions { margin-top: 18px; display: flex; gap: 8px; }
+
+    .status-line {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--text-muted);
+        flex-shrink: 0;
+    }
+    .status-dot.ok { background: var(--green-color); }
+    .status-dot.error { background: var(--danger-hover); }
+
+    .card-title {
+        font-size: 13px;
+        font-weight: bold;
+        color: var(--text-muted);
+        margin-bottom: 10px;
+    }
+
+    .big-number {
+        font-size: 30px;
+        font-weight: bold;
+        color: var(--text-main);
+        line-height: 1.2;
+    }
+
+    .sub-number {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-top: 4px;
+    }
+
+    .progress-bar {
+        width: 100%;
+        height: 10px;
+        background: var(--goal-track-bg);
+        border-radius: 6px;
+        overflow: hidden;
+        margin-top: 12px;
+    }
+
+    .progress-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--accent-color);
+        border-radius: 6px;
+        transition: width 0.3s ease;
+    }
+    .progress-fill.achieved { background: var(--green-color); }
+
+    .achieved-badge {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: bold;
+        color: #ffffff;
+        background: var(--green-color);
+        padding: 3px 10px;
+        border-radius: 10px;
+        margin-left: 8px;
+        vertical-align: middle;
+    }
+
+    .grid-two {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+
+    @media (max-width: 520px) {
+        .grid-two { grid-template-columns: 1fr; }
+    }
+
+    .streak-row {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+    }
+
+    .streak-best {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+
+    .chart-wrap {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+        height: 120px;
+        margin-top: 8px;
+    }
+
+    .chart-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        height: 100%;
+        justify-content: flex-end;
+    }
+
+    .chart-bar {
+        width: 100%;
+        max-width: 32px;
+        background: var(--accent-color);
+        border-radius: 4px 4px 0 0;
+        min-height: 2px;
+    }
+
+    .chart-bar.today { background: var(--green-color); }
+
+    .chart-label {
+        font-size: 10px;
+        color: var(--text-muted);
+    }
+
+    .chart-value {
+        font-size: 10px;
+        color: var(--text-muted);
+    }
+
+    /* 科目別の内訳 */
+    .subject-breakdown {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 14px;
+    }
+
+    .subject-chip-mini {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-main);
+        background: var(--bg-color);
+        border: 1px solid var(--border-color);
+        padding: 4px 10px;
+        border-radius: 14px;
+    }
+
+    .subject-chip-mini .subject-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--tag-dot-color, var(--accent-color));
+        flex-shrink: 0;
+    }
+
+    .subject-breakdown-empty {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+
+    .subject-bar-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .subject-bar-row:first-child { margin-top: 0; }
+
+    .subject-bar-label {
+        font-size: 12px;
+        color: var(--text-main);
+        width: 90px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .subject-bar-label .subject-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--tag-dot-color, var(--accent-color));
+        flex-shrink: 0;
+    }
+
+    .subject-bar-track {
+        flex: 1;
+        height: 10px;
+        background: var(--goal-track-bg);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    .subject-bar-fill {
+        height: 100%;
+        background: var(--tag-dot-color, var(--accent-color));
+        border-radius: 6px;
+    }
+
+    .subject-bar-minutes {
+        font-size: 12px;
+        color: var(--text-muted);
+        width: 40px;
+        text-align: right;
+        flex-shrink: 0;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 30px 10px;
+        color: var(--text-muted);
+        font-size: 13px;
+        line-height: 1.8;
+    }
+
+    .updated-at {
+        font-size: 11px;
+        color: var(--text-muted);
+        text-align: right;
+        margin-top: 4px;
+    }
+
+    .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+    <header>
+        <h1><svg class="kesunka-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 450 450">
+  <g>
+    <rect fill="#b93e31" width="450" height="450" rx="78.95" ry="78.95"/>
+    <path fill="#e99f87" d="M78.95,0h292.1c43.57,0,78.95,35.38,78.95,78.95v270.62c0,43.57-35.38,78.95-78.95,78.95H78.95c-43.57,0-78.95-35.38-78.95-78.95V78.95C0,35.38,35.38,0,78.95,0Z"/>
+    <rect fill="#f7ddd1" width="450" height="404.83" rx="78.95" ry="78.95"/>
+    <path fill="#e99f87" d="M450,304.72c0,42.08-41.39,72.68-83.47,72.68H15.79v6.27h355.26c43.42,0,78.95-35.53,78.95-78.95h0Z"/>
+    <path fill="#e99f87" d="M450,275.94c0,42.08-41.39,72.68-83.47,72.68H15.79v6.27h355.26c43.42,0,78.95-35.53,78.95-78.95h0Z"/>
+    <path fill="#e99f87" d="M450,247.15c0,42.08-41.39,72.68-83.47,72.68H15.79v6.27h355.26c43.42,0,78.95-35.53,78.95-78.95h0Z"/>
+    <path fill="#b93e31" d="M100.66,428.51c-43.42,0-78.95-29.36-78.95-65.24s35.53-65.24,78.95-65.24h270.39c43.42,0,78.95-35.53,78.95-78.95V78.95c0-43.42-35.53-78.95-78.95-78.95H78.95C35.53,0,0,35.53,0,78.95v292.11c0,43.42,35.53,78.95,78.95,78.95h53.29c43.42,0,78.95-4.83,78.95-10.74s-35.53-10.74-78.95-10.74h-31.58Z"/>
+    <path fill="#d94b3b" d="M371.05,0H78.95c-14.99,0-28.99,4.31-40.96,11.64v283.7c13.47-10.1,30.43-16.19,48.85-16.19h284.21c43.42,0,78.95-35.53,78.95-78.95v-121.25c0-43.42-35.53-78.95-78.95-78.95Z"/>
+  </g>
+  <path fill="#f1c40f" d="M120.28,250.41c16.55-2.88,17.26-13.31,17.26-37.05V67.7c0-23.74-.72-34.17-17.26-37.05v-10.07h108.62v10.07c-16.55,2.88-17.26,13.31-17.26,37.05v41l14.39-14.75c26.62-27.34,42.8-39.92,42.8-51.43,0-6.11-3.96-10.07-11.51-11.87v-10.07h101.43v10.07c-20.14,1.08-46.4,14.75-70.5,37.77l-15.83,14.75c24.82,20.5,46.76,55.39,64.74,105.75,12.23,33.81,12.95,56.11,37.05,61.5l-.72,10.07h-109.34v-10.07c7.55-1.44,10.07-5.39,10.07-13.67,0-18.34-14.75-61.5-50.35-106.46l-12.23,8.99v74.09c0,23.74.72,34.17,17.26,37.05v10.07h-108.62v-10.07Z"/>
+</svg><span class="version-badge">kesunka mama v.1.0.4</span></h1>
+        <div class="header-controls">
+            <div class="settings-trigger" id="settingsTrigger" onclick="showSetup()">⚙️ 設定</div>
+            <div class="theme-control" onclick="toggleTheme()">
+                <span id="themeIcon">🌙</span> <span id="themeLabel">ダークモード</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="panel setup-panel" id="setupPanel">
+        <div class="setup-note">
+            KESUNKAアプリ側の「👪 共有」設定画面で表示されるFirebase設定と共有コードを、
+            そのままここに貼り付けてください。ここで入力した内容はこのブラウザにのみ保存され、
+            送信・記録はされません。
+        </div>
+        <label>Firebase設定（JSON）</label>
+        <textarea id="setupFirebaseConfigInput" rows="6" placeholder='{"apiKey": "...", "projectId": "...", ...}'></textarea>
+        <label>共有コード</label>
+        <input type="text" id="setupShareCodeInput" placeholder="KESUNKA側で発行されたコード">
+        <div class="setup-actions">
+            <button class="btn" onclick="connectFromSetup()">接続する</button>
+            <button class="btn btn-outline hidden" id="setupCancelBtn" onclick="hideSetup()">キャンセル</button>
+        </div>
+    </div>
+
+    <div id="mainView" class="hidden">
+        <div class="status-line">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">接続待機中...</span>
+        </div>
+
+        <div id="emptyState" class="panel empty-state hidden">
+            まだ学習データが共有されていません。<br>
+            お子さんのKESUNKAで記録・共有が行われると、ここに表示されます。
+        </div>
+
+        <div id="dataView" class="hidden">
+            <div class="panel">
+                <div class="card-title">今日の学習時間</div>
+                <div class="big-number" id="todayBig">0分</div>
+                <div class="sub-number" id="todaySub">目標未設定</div>
+                <div class="progress-bar"><div class="progress-fill" id="todayFill"></div></div>
+                <div class="subject-breakdown" id="todaySubjectBreakdown"></div>
+            </div>
+
+            <div class="grid-two">
+                <div class="panel">
+                    <div class="card-title">今週（直近7日）</div>
+                    <div class="big-number" id="weekBig">0分</div>
+                    <div class="sub-number" id="weekSub">達成率 0%</div>
+                    <div class="progress-bar"><div class="progress-fill" id="weekFill"></div></div>
+                </div>
+                <div class="panel">
+                    <div class="card-title">連続記録</div>
+                    <div class="streak-row">
+                        <div class="big-number" id="streakBig">🔥 0日</div>
+                    </div>
+                    <div class="streak-best" id="streakBest">最長記録: 0日</div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="card-title">直近7日間の学習時間</div>
+                <div class="chart-wrap" id="chartWrap"></div>
+            </div>
+
+            <div class="panel">
+                <div class="card-title">科目別の学習時間（直近7日）</div>
+                <div id="weekSubjectBreakdown"></div>
+                <div class="updated-at" id="updatedAt"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const THEME_KEY = 'studylog_parent_theme';
+const PARENT_CONFIG_KEY = 'studylog_parent_config_v1';
+const FIREBASE_SDK_VERSION = '12.15.0';
+
+const setupPanelEl = document.getElementById('setupPanel');
+const setupCancelBtnEl = document.getElementById('setupCancelBtn');
+const setupFirebaseConfigInputEl = document.getElementById('setupFirebaseConfigInput');
+const setupShareCodeInputEl = document.getElementById('setupShareCodeInput');
+const mainViewEl = document.getElementById('mainView');
+const statusDotEl = document.getElementById('statusDot');
+const statusTextEl = document.getElementById('statusText');
+const emptyStateEl = document.getElementById('emptyState');
+const dataViewEl = document.getElementById('dataView');
+const todayBigEl = document.getElementById('todayBig');
+const todaySubEl = document.getElementById('todaySub');
+const todayFillEl = document.getElementById('todayFill');
+const weekBigEl = document.getElementById('weekBig');
+const weekSubEl = document.getElementById('weekSub');
+const weekFillEl = document.getElementById('weekFill');
+const streakBigEl = document.getElementById('streakBig');
+const streakBestEl = document.getElementById('streakBest');
+const chartWrapEl = document.getElementById('chartWrap');
+const todaySubjectBreakdownEl = document.getElementById('todaySubjectBreakdown');
+const weekSubjectBreakdownEl = document.getElementById('weekSubjectBreakdown');
+const updatedAtEl = document.getElementById('updatedAt');
+
+let parentConfig = { firebaseConfig: null, shareCode: null };
+let unsubscribeFn = null;
+
+/* ==========================================================================
+ * テーマ
+ * ========================================================================== */
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    setTheme(current !== 'dark' ? 'dark' : 'light');
+}
+
+function setTheme(theme) {
+    const icon = document.getElementById('themeIcon');
+    const label = document.getElementById('themeLabel');
+    if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        icon.textContent = '☀️';
+        label.textContent = 'ライトモード';
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        icon.textContent = '🌙';
+        label.textContent = 'ダークモード';
+    }
+    try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+}
+
+/* ==========================================================================
+ * 設定の保存・読み込み
+ * ========================================================================== */
+function loadParentConfig() {
+    try {
+        const raw = localStorage.getItem(PARENT_CONFIG_KEY);
+        if (!raw) return { firebaseConfig: null, shareCode: null };
+        const parsed = JSON.parse(raw);
+        return {
+            firebaseConfig: (parsed.firebaseConfig && typeof parsed.firebaseConfig === 'object') ? parsed.firebaseConfig : null,
+            shareCode: typeof parsed.shareCode === 'string' ? parsed.shareCode : null
+        };
+    } catch (e) {
+        return { firebaseConfig: null, shareCode: null };
+    }
+}
+
+function persistParentConfig() {
+    try { localStorage.setItem(PARENT_CONFIG_KEY, JSON.stringify(parentConfig)); } catch (e) {}
+}
+
+function showSetup() {
+    setupFirebaseConfigInputEl.value = parentConfig.firebaseConfig ? JSON.stringify(parentConfig.firebaseConfig, null, 2) : '';
+    setupShareCodeInputEl.value = parentConfig.shareCode || '';
+    setupCancelBtnEl.classList.toggle('hidden', !parentConfig.firebaseConfig);
+    setupPanelEl.classList.remove('hidden');
+    mainViewEl.classList.add('hidden');
+}
+
+function hideSetup() {
+    if (!parentConfig.firebaseConfig || !parentConfig.shareCode) return;
+    setupPanelEl.classList.add('hidden');
+    mainViewEl.classList.remove('hidden');
+}
+
+function connectFromSetup() {
+    const configText = setupFirebaseConfigInputEl.value.trim();
+    const code = setupShareCodeInputEl.value.trim();
+
+    if (!configText) { setStatus('Firebase設定を貼り付けてください', 'error'); return; }
+    if (!code) { setStatus('共有コードを入力してください', 'error'); return; }
+
+    let parsedConfig;
+    try {
+        parsedConfig = JSON.parse(configText);
+    } catch (e) {
+        setStatus('Firebase設定のJSON形式が正しくありません', 'error');
+        return;
+    }
+    if (!parsedConfig || typeof parsedConfig !== 'object' || !parsedConfig.apiKey || !parsedConfig.projectId) {
+        setStatus('Firebase設定にapiKey・projectIdが見当たりません', 'error');
+        return;
+    }
+
+    parentConfig = { firebaseConfig: parsedConfig, shareCode: code };
+    persistParentConfig();
+
+    setupPanelEl.classList.add('hidden');
+    mainViewEl.classList.remove('hidden');
+
+    connectAndSubscribe();
+}
+
+/* ==========================================================================
+ * Firestore購読（閲覧専用）
+ * ========================================================================== */
+function setStatus(text, kind) {
+    statusTextEl.textContent = text;
+    statusDotEl.classList.remove('ok', 'error');
+    if (kind === 'ok') statusDotEl.classList.add('ok');
+    if (kind === 'error') statusDotEl.classList.add('error');
+}
+
+async function connectAndSubscribe() {
+    if (unsubscribeFn) { unsubscribeFn(); unsubscribeFn = null; }
+    if (!parentConfig.firebaseConfig || !parentConfig.shareCode) return;
+
+    setStatus('接続中...', null);
+
+    try {
+        const [appMod, storeMod] = await Promise.all([
+            import(/* webpackIgnore: true */ `https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app.js`),
+            import(/* webpackIgnore: true */ `https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-firestore.js`)
+        ]);
+        const app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(parentConfig.firebaseConfig);
+        const db = storeMod.getFirestore(app);
+        const ref = storeMod.doc(db, 'studylog_shared', parentConfig.shareCode);
+
+        unsubscribeFn = storeMod.onSnapshot(ref, (snap) => {
+            if (!snap.exists()) {
+                setStatus('接続しました（データ待ち）', 'ok');
+                emptyStateEl.classList.remove('hidden');
+                dataViewEl.classList.add('hidden');
+                return;
+            }
+            emptyStateEl.classList.add('hidden');
+            dataViewEl.classList.remove('hidden');
+            renderSummary(snap.data());
+            setStatus('接続中（自動更新）', 'ok');
+        }, (err) => {
+            console.error('Firestore購読エラー:', err);
+            setStatus('読み込みに失敗しました（共有コードやセキュリティルールをご確認ください）', 'error');
+        });
+    } catch (e) {
+        console.error('Firebase SDKの読み込みに失敗しました:', e);
+        setStatus('Firebaseへの接続に失敗しました（設定内容をご確認ください）', 'error');
+    }
+}
+
+/* ==========================================================================
+ * 科目の色分け
+ * KESUNKA本体側（index.html）のSUBJECT_OPTIONS/FLAT_UI_TAG_COLORSと同じ
+ * 定義・ロジックを踏襲し、同じ科目が同じ色で表示されるようにしている。
+ * ========================================================================== */
+const SUBJECT_OPTIONS = ['英語', '国語', '言語文化', '地理', '歴史', '数学', '化学', '生物', '情報', '読書・映画', '宿題・課題', 'そのほか'];
+
+const FLAT_UI_TAG_COLORS = [
+    '#1abc9c', '#e74c3c', '#3498db', '#34495e',
+    '#9b59b6', '#2ecc71', '#f39c12', '#7f8c8d'
+];
+
+const DARK_MODE_TAG_COLOR_OVERRIDES = {
+    '#34495e': '#7f9cbd'
+};
+
+function tagHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+    }
+    return hash;
+}
+
+function subjectColor(subject) {
+    const idx = SUBJECT_OPTIONS.indexOf(subject);
+    const baseColor = (idx === -1)
+        ? FLAT_UI_TAG_COLORS[tagHash(subject) % FLAT_UI_TAG_COLORS.length]
+        : FLAT_UI_TAG_COLORS[idx % FLAT_UI_TAG_COLORS.length];
+
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (isDark && DARK_MODE_TAG_COLOR_OVERRIDES[baseColor]) {
+        return DARK_MODE_TAG_COLOR_OVERRIDES[baseColor];
+    }
+    return baseColor;
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>'"]/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[m]));
+}
+
+function renderSubjectBreakdown(el, subjects) {
+    if (!Array.isArray(subjects) || subjects.length === 0) {
+        el.innerHTML = '<div class="subject-breakdown-empty">記録がありません</div>';
+        return;
+    }
+    el.innerHTML = subjects.map(s => `
+        <span class="subject-chip-mini" style="--tag-dot-color:${subjectColor(s.subject)}">
+            <span class="subject-dot"></span>${escapeHtml(s.subject)} ${Number(s.minutes) || 0}分
+        </span>
+    `).join('');
+}
+
+function renderSubjectBars(el, subjects) {
+    if (!Array.isArray(subjects) || subjects.length === 0) {
+        el.innerHTML = '<div class="subject-breakdown-empty">記録がありません</div>';
+        return;
+    }
+    const maxMinutes = Math.max(1, ...subjects.map(s => Number(s.minutes) || 0));
+    el.innerHTML = subjects.map(s => {
+        const minutes = Number(s.minutes) || 0;
+        const widthPct = Math.max(2, Math.round((minutes / maxMinutes) * 100));
+        const color = subjectColor(s.subject);
+        return `
+            <div class="subject-bar-row">
+                <span class="subject-bar-label" style="--tag-dot-color:${color}"><span class="subject-dot"></span>${escapeHtml(s.subject)}</span>
+                <div class="subject-bar-track"><div class="subject-bar-fill" style="width:${widthPct}%;--tag-dot-color:${color}"></div></div>
+                <span class="subject-bar-minutes">${minutes}分</span>
+            </div>`;
+    }).join('');
+}
+
+/* ==========================================================================
+ * 表示
+ * ========================================================================== */
+const WEEKDAYS_JA = ['日', '月', '火', '水', '木', '金', '土'];
+
+function renderSummary(data) {
+    const goal = Number(data.dailyGoalMinutes) || 0;
+    const todayTotal = Number(data.todayTotalMinutes) || 0;
+    const todayPct = goal > 0 ? Math.min(100, Math.round((todayTotal / goal) * 100)) : (todayTotal > 0 ? 100 : 0);
+
+    todayBigEl.innerHTML = `${todayTotal}分` + (data.todayAchieved ? '<span class="achieved-badge">達成</span>' : '');
+    todaySubEl.textContent = goal > 0 ? `目標 ${goal}分` : '目標未設定';
+    todayFillEl.style.width = todayPct + '%';
+    todayFillEl.classList.toggle('achieved', !!data.todayAchieved);
+    renderSubjectBreakdown(todaySubjectBreakdownEl, data.todaySubjects);
+
+    const weekTotal = Number(data.weekTotalMinutes) || 0;
+    const weekGoal = Number(data.weekGoalMinutes) || 0;
+    const weekRate = Number(data.weekAchievementRate) || 0;
+    const weekPct = weekGoal > 0 ? Math.min(100, weekRate) : (weekTotal > 0 ? 100 : 0);
+
+    weekBigEl.textContent = `${weekTotal}分`;
+    weekSubEl.textContent = weekGoal > 0 ? `目標 ${weekGoal}分・達成率 ${weekRate}%` : `達成率 -`;
+    weekFillEl.style.width = weekPct + '%';
+    weekFillEl.classList.toggle('achieved', weekGoal > 0 && weekTotal >= weekGoal);
+
+    const current = Number(data.currentStreak) || 0;
+    const best = Number(data.bestStreak) || 0;
+    streakBigEl.textContent = `🔥 ${current}日連続`;
+    streakBestEl.textContent = `最長記録: ${best}日`;
+
+    renderSubjectBars(weekSubjectBreakdownEl, data.weekSubjects);
+
+    const days = Array.isArray(data.last7Days) ? data.last7Days : [];
+    const maxMinutes = Math.max(1, ...days.map(d => Number(d.minutes) || 0));
+    const todayStr = new Date();
+    const todayDateStr = `${todayStr.getFullYear()}-${String(todayStr.getMonth() + 1).padStart(2, '0')}-${String(todayStr.getDate()).padStart(2, '0')}`;
+
+    chartWrapEl.innerHTML = days.map(d => {
+        const minutes = Number(d.minutes) || 0;
+        const heightPct = Math.max(2, Math.round((minutes / maxMinutes) * 100));
+        const isToday = d.date === todayDateStr;
+        const dateObj = d.date ? new Date(d.date + 'T00:00:00') : null;
+        const label = dateObj ? WEEKDAYS_JA[dateObj.getDay()] : '';
+        return `
+            <div class="chart-col">
+                <div class="chart-value">${minutes}</div>
+                <div class="chart-bar${isToday ? ' today' : ''}" style="height:${heightPct}%"></div>
+                <div class="chart-label">${label}</div>
+            </div>`;
+    }).join('');
+
+    if (data.updatedAt) {
+        try {
+            const dt = new Date(data.updatedAt);
+            updatedAtEl.textContent = `最終更新: ${dt.toLocaleString('ja-JP')}`;
+        } catch (e) {
+            updatedAtEl.textContent = '';
+        }
+    }
+}
+
+/* ==========================================================================
+ * 初期化
+ * ========================================================================== */
+window.addEventListener('load', function() {
+    try {
+        setTheme(localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light');
+    } catch (e) {
+        console.error('テーマのロードに失敗しました:', e);
+    }
+
+    parentConfig = loadParentConfig();
+
+    if (parentConfig.firebaseConfig && parentConfig.shareCode) {
+        setupPanelEl.classList.add('hidden');
+        mainViewEl.classList.remove('hidden');
+        connectAndSubscribe();
+    } else {
+        showSetup();
+    }
+});
+</script>
+</body>
+</html>
