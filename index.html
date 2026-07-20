@@ -1,0 +1,2697 @@
+<!DOCTYPE html>
+<!--
+    ============================================================================
+    StudyLog（勉強ログアプリ） - 変更履歴 (Changelog)
+    ============================================================================
+
+    Guevara（日記アプリ）をベースに、勉強ログ専用アプリとして新規に作成。
+    データ構造・機能を勉強ログ向けに大きく再設計している。
+
+    [v0.1.0] (Initial Release)
+      ベースからの主な変更点:
+        - データ構造を「1日1本のテキスト」から「1日に複数の学習セッション
+          （科目・時間・メモ）を持てる」構造に変更。
+        - 学習時間の記録（分入力 / 開始・停止タイマー）を追加。
+          タイマーはlocalStorageに開始時刻を保持し、ページ再読み込みや
+          バックグラウンド復帰後も計測を継続できるようにした。
+        - 科目（カテゴリ）を構造化。Guevaraのタグと同様、登場順で
+          8色パレットから色を割り当てる方式を踏襲。
+        - 1日/週の学習目標と進捗バー、連続記録（ストリーク）を追加。
+        - 活動記録ヒートマップは文字数ではなく合計学習時間（分）を基準に変更。
+        - 前後日ナビゲーション・スワイプ操作など、タッチ操作を意識したUIに調整。
+          （iPad/スマホでの利用がメインのため）
+        - PWA化（manifest.json / service worker / アイコン）に対応し、
+          ホーム画面への追加とオフライン起動をサポート。
+        - 端末間の自動同期は今回のバージョンでは実装していない
+          （利用端末をiPadに一本化する方針のため）。データの持ち出しは
+          引き続きJSONバックアップ/読み込みで対応する。
+
+    [v0.2.0] (Parent Summary Sharing Release)
+      機能追加:
+        - 保護者が別ブラウザ・別アカウントから「常に最新の要約」を確認できる
+          共有機能を追加。子ども側の全データを同期するのではなく、
+          今日/週の合計時間・目標達成率・連続記録・直近7日間の分数のみを
+          要約としてFirestoreの1ドキュメントに書き込む方式（一方向・要約のみ）。
+        - 見た日付・科目・メモといった詳細情報は共有対象に含めない。
+        - ヘッダーに「👪 共有」ボタンを追加し、Firebase設定(JSON)と共有コードを
+          登録すると、セッションの追加/編集/削除・目標変更のたびに要約を
+          自動送信する（1.5秒デバウンス）。
+        - 保護者側は別ファイル（parent-view.html）を使い、同じ共有コードを
+          入力してFirestoreをリアルタイム購読し、要約を閲覧する
+          （書き込み機能は持たせず閲覧専用）。
+        - Firestoreのセキュリティルールは studylog_shared コレクションのみを
+          対象に読み書きを許可する設計とし、認証なしで長いランダムな共有コード
+          を事実上のパスワードとして扱う（詳細はセットアップ手順書を参照）。
+
+    [v1.0.1] (KESUNKA Rebrand & UI Refinement Release)
+      変更内容:
+        - アプリ名を「StudyLog」から「KESUNKA」に変更
+          （ブラウザタブは大文字表記「KESUNKA v.1.0.1」、画面内バッジは
+          小文字表記「kesunka v1.0.1」。他アプリの表記慣習を踏襲）。
+          内部のlocalStorageキー名・Firestoreコレクション名（studylog_〜）は
+          互換性・安全のため変更していない（見た目には影響しない）。
+        - 一覧パネルの「全件TXT保存」「JSONバックアップ」「JSON読み込み」を
+          一列に整列させ、パネル下段に移動。上段は検索とタグ（科目）表示のみに整理。
+        - 目標エリアの「📅」「🎯」の絵文字を削除。
+        - 連続記録（ストリーク）表示をヘッダーから目標エリア内に移動。
+        - セッション追加/編集フォームの「時間（分）」をテキスト入力から
+          30/60/90/120/150/180分のタップ選択式チップに変更。
+        - セッション追加/編集フォームの「科目」を自由入力+候補表示から、
+          固定11科目（英語/国語/言語文化/地理/歴史/数学/化学/生物/情報/
+          読書・映画/そのほか）からタップで選ぶ方式に変更。
+          これに伴い、科目の色割り当てを「データ内での登場順」ではなく
+          「この固定リスト内の順序」ベースに変更（登場順キャッシュの仕組みは削除）。
+          旧バージョンのデータやJSONインポートでリスト外の科目名が
+          残っている場合も表示は継続できるよう、フォールバックのハッシュ
+          割り当ては維持している。
+        - メモ欄のプレースホルダーを「やったことを一言メモ...」から
+          「勉強内容、課題点、メモなど」に変更。
+
+    [v1.0.2]
+      変更内容:
+        - タイマー機能（⏱タイマー開始／■停止して反映）を削除。
+          関連するUI・JS（startTimer/stopTimer/tickTimer/updateTimerUI/
+          restoreActiveTimerIfAny等）・localStorageキー（ACTIVE_TIMER_KEY）
+          を撤去。時間（分）は引き続きタップ選択チップで入力する。
+        - 科目の固定リストに「宿題・課題」を追加（読書・映画とそのほかの間）。
+
+    [v1.0.3]
+      変更内容:
+        - ヘッダーにあった「📊 活動記録」ボタンを、目標エリア（goal-panel）内に移動。
+        - 時間（分）選択チップの表示を「30」「60」から「30分」「60分」のように
+          単位付き表示に変更（内部の値は数値のまま）。
+        - 時間（分）の選択肢に「45分」を追加（30分の次、60分の前）。
+
+    [v1.0.4]
+      変更内容:
+        - 保護者への共有データに、科目別の学習時間内訳（今日・直近7日間）を追加。
+          これに伴い、共有される情報は「合計時間・目標達成率・連続記録」に加えて
+          科目名と科目ごとの分数も含むようになった（メモ・日付単位の詳細は
+          引き続き送信しない）。共有オンにする画面の説明文もあわせて更新。
+
+    [v1.0.5]
+      変更内容:
+        - ロゴSVG（本の絵柄）をファビコンとして埋め込み（外部ファイル参照ではなく、
+          単一HTML完結の原則を保つためdata URI(base64)として<head>内に直接埋め込み）。
+          元SVGの<style>クラス定義は、グローバルCSSとのクラス名衝突を避けるため、
+          各要素にfill属性を直接インライン化して取り込んだ（TRUMBO/DebuGoOnの
+          アイコン埋め込みパターンを踏襲）。
+        - 同じロゴSVGを、ヘッダーのタイトル文字列の前にインラインSVGとして表示。
+
+    ============================================================================
+-->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>KESUNKA v.1.0.5</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#3498db">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="KESUNKA">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NTAgNDUwIj4KICA8Zz4KICAgIDxyZWN0IGZpbGw9IiNiOTNlMzEiIHdpZHRoPSI0NTAiIGhlaWdodD0iNDUwIiByeD0iNzguOTUiIHJ5PSI3OC45NSIvPgogICAgPHBhdGggZmlsbD0iI2U5OWY4NyIgZD0iTTc4Ljk1LDBoMjkyLjFjNDMuNTcsMCw3OC45NSwzNS4zOCw3OC45NSw3OC45NXYyNzAuNjJjMCw0My41Ny0zNS4zOCw3OC45NS03OC45NSw3OC45NUg3OC45NWMtNDMuNTcsMC03OC45NS0zNS4zOC03OC45NS03OC45NVY3OC45NUMwLDM1LjM4LDM1LjM4LDAsNzguOTUsMFoiLz4KICAgIDxyZWN0IGZpbGw9IiNmN2RkZDEiIHdpZHRoPSI0NTAiIGhlaWdodD0iNDA0LjgzIiByeD0iNzguOTUiIHJ5PSI3OC45NSIvPgogICAgPHBhdGggZmlsbD0iI2U5OWY4NyIgZD0iTTQ1MCwzMDQuNzJjMCw0Mi4wOC00MS4zOSw3Mi42OC04My40Nyw3Mi42OEgxNS43OXY2LjI3aDM1NS4yNmM0My40MiwwLDc4Ljk1LTM1LjUzLDc4Ljk1LTc4Ljk1aDBaIi8+CiAgICA8cGF0aCBmaWxsPSIjZTk5Zjg3IiBkPSJNNDUwLDI3NS45NGMwLDQyLjA4LTQxLjM5LDcyLjY4LTgzLjQ3LDcyLjY4SDE1Ljc5djYuMjdoMzU1LjI2YzQzLjQyLDAsNzguOTUtMzUuNTMsNzguOTUtNzguOTVoMFoiLz4KICAgIDxwYXRoIGZpbGw9IiNlOTlmODciIGQ9Ik00NTAsMjQ3LjE1YzAsNDIuMDgtNDEuMzksNzIuNjgtODMuNDcsNzIuNjhIMTUuNzl2Ni4yN2gzNTUuMjZjNDMuNDIsMCw3OC45NS0zNS41Myw3OC45NS03OC45NWgwWiIvPgogICAgPHBhdGggZmlsbD0iI2I5M2UzMSIgZD0iTTEwMC42Niw0MjguNTFjLTQzLjQyLDAtNzguOTUtMjkuMzYtNzguOTUtNjUuMjRzMzUuNTMtNjUuMjQsNzguOTUtNjUuMjRoMjcwLjM5YzQzLjQyLDAsNzguOTUtMzUuNTMsNzguOTUtNzguOTVWNzguOTVjMC00My40Mi0zNS41My03OC45NS03OC45NS03OC45NUg3OC45NUMzNS41MywwLDAsMzUuNTMsMCw3OC45NXYyOTIuMTFjMCw0My40MiwzNS41Myw3OC45NSw3OC45NSw3OC45NWg1My4yOWM0My40MiwwLDc4Ljk1LTQuODMsNzguOTUtMTAuNzRzLTM1LjUzLTEwLjc0LTc4Ljk1LTEwLjc0aC0zMS41OFoiLz4KICAgIDxwYXRoIGZpbGw9IiNkOTRiM2IiIGQ9Ik0zNzEuMDUsMEg3OC45NWMtMTQuOTksMC0yOC45OSw0LjMxLTQwLjk2LDExLjY0djI4My43YzEzLjQ3LTEwLjEsMzAuNDMtMTYuMTksNDguODUtMTYuMTloMjg0LjIxYzQzLjQyLDAsNzguOTUtMzUuNTMsNzguOTUtNzguOTV2LTEyMS4yNWMwLTQzLjQyLTM1LjUzLTc4Ljk1LTc4Ljk1LTc4Ljk1WiIvPgogIDwvZz4KICA8cGF0aCBmaWxsPSIjZjFjNDBmIiBkPSJNMTIwLjI4LDI1MC40MWMxNi41NS0yLjg4LDE3LjI2LTEzLjMxLDE3LjI2LTM3LjA1VjY3LjdjMC0yMy43NC0uNzItMzQuMTctMTcuMjYtMzcuMDV2LTEwLjA3aDEwOC42MnYxMC4wN2MtMTYuNTUsMi44OC0xNy4yNiwxMy4zMS0xNy4yNiwzNy4wNXY0MWwxNC4zOS0xNC43NWMyNi42Mi0yNy4zNCw0Mi44LTM5LjkyLDQyLjgtNTEuNDMsMC02LjExLTMuOTYtMTAuMDctMTEuNTEtMTEuODd2LTEwLjA3aDEwMS40M3YxMC4wN2MtMjAuMTQsMS4wOC00Ni40LDE0Ljc1LTcwLjUsMzcuNzdsLTE1LjgzLDE0Ljc1YzI0LjgyLDIwLjUsNDYuNzYsNTUuMzksNjQuNzQsMTA1Ljc1LDEyLjIzLDMzLjgxLDEyLjk1LDU2LjExLDM3LjA1LDYxLjVsLS43MiwxMC4wN2gtMTA5LjM0di0xMC4wN2M3LjU1LTEuNDQsMTAuMDctNS4zOSwxMC4wNy0xMy42NywwLTE4LjM0LTE0Ljc1LTYxLjUtNTAuMzUtMTA2LjQ2bC0xMi4yMyw4Ljk5djc0LjA5YzAsMjMuNzQuNzIsMzQuMTcsMTcuMjYsMzcuMDV2MTAuMDdoLTEwOC42MnYtMTAuMDdaIi8+Cjwvc3ZnPg==">
+
+<style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    :root {
+        --bg-color: #f1f5f9;
+        --panel-bg: #ffffff;
+        --border-color: #e2e8f0;
+        --text-main: #1e293b;
+        --text-muted: #64748b;
+
+        --accent-color: #3498db;
+        --accent-hover: #2980b9;
+
+        --submit-color: #3498db;
+        --submit-hover: #2980b9;
+
+        --danger-color: #ef8177;
+        --danger-hover: #e74c3c;
+
+        --save-color: #34495e;
+        --save-hover: #2c3e50;
+
+        --green-color: #2ecc71;
+        --green-hover: #27ae60;
+
+        --json-color: #bb8fce;
+        --json-hover: #9b59b6;
+
+        --textarea-bg: #fafafa;
+        --textarea-focus-bg: #ffffff;
+
+        --dragover-bg: #eff6ff;
+        --toast-bg: #34495e;
+        --toast-text: #ecf0f1;
+
+        --tag-bg: #f9ca24;
+        --tag-text: #1e1300;
+
+        --goal-track-bg: #e2e8f0;
+    }
+
+    [data-theme="dark"] {
+        --bg-color: #0f172a;
+        --panel-bg: #1e293b;
+        --border-color: #334155;
+        --text-main: #f8fafc;
+        --text-muted: #94a3b8;
+
+        --accent-color: #3498db;
+        --accent-hover: #5dade2;
+
+        --submit-color: #3498db;
+        --submit-hover: #5dade2;
+
+        --danger-color: #c0605a;
+        --danger-hover: #e74c3c;
+
+        --save-color: #7f8c8d;
+        --save-hover: #95a5a6;
+
+        --green-color: #2ecc71;
+        --green-hover: #58d68d;
+
+        --json-color: #a873c4;
+        --json-hover: #c9a0dc;
+
+        --textarea-bg: #0f172a;
+        --textarea-focus-bg: #1e293b;
+
+        --dragover-bg: #1e293b;
+        --toast-bg: #2c3e50;
+        --toast-text: #ecf0f1;
+
+        --tag-bg: #f9ca24;
+        --tag-text: #1e1300;
+
+        --goal-track-bg: #334155;
+    }
+
+    body {
+        font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-main);
+        margin: 0;
+        padding: 20px;
+        padding-top: max(20px, env(safe-area-inset-top));
+        padding-bottom: max(20px, env(safe-area-inset-bottom));
+        padding-left: max(20px, env(safe-area-inset-left));
+        padding-right: max(20px, env(safe-area-inset-right));
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    /* iOSでフォームフォーカス時に勝手にズームしないよう16px以上を確保 */
+    input, textarea, select { font-size: 16px; }
+
+    header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+        padding: 0 15px;
+        width: 100%;
+        max-width: 1000px;
+        margin-left: auto;
+        margin-right: auto;
+        flex-wrap: wrap;
+        row-gap: 8px;
+    }
+
+    h1 {
+        font-size: 24px;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        user-select: none;
+    }
+
+    .kesunka-icon {
+        width: 32px;
+        height: 32px;
+        vertical-align: middle;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+
+    .version-badge {
+        font-size: 12px;
+        color: var(--text-muted);
+        font-weight: bold;
+        background-color: var(--border-color);
+        padding: 2px 8px;
+        border-radius: 12px;
+        vertical-align: middle;
+        font-family: monospace;
+    }
+
+    .theme-control {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text-muted);
+        background: var(--bg-color);
+        padding: 6px 12px;
+        border-radius: 20px;
+        cursor: pointer;
+        min-height: 32px;
+    }
+
+    .header-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .streak-badge {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        font-weight: bold;
+        color: var(--text-main);
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        padding: 5px 12px;
+        border-radius: 20px;
+        user-select: none;
+        white-space: nowrap;
+    }
+
+    .contribution-trigger {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text-muted);
+        background: var(--bg-color);
+        padding: 6px 12px;
+        border-radius: 20px;
+        cursor: pointer;
+        min-height: 32px;
+    }
+
+    .contribution-trigger.contribution-trigger-goal {
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+    }
+
+    .contribution-modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.55);
+        z-index: 2000;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    }
+
+    .contribution-modal-overlay.open { display: flex; }
+
+    .contribution-modal {
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 20px 24px;
+        max-width: 920px;
+        width: 100%;
+        max-height: 85vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .contribution-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+    }
+
+    .contribution-modal-header h2 {
+        font-size: 15px;
+        margin: 0;
+        color: var(--text-main);
+    }
+
+    .contribution-close-btn {
+        background: none;
+        border: none;
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+        color: var(--text-muted);
+        padding: 8px;
+        min-width: 36px;
+        min-height: 36px;
+    }
+
+    .contribution-close-btn:hover { color: var(--text-main); }
+
+    .contribution-summary {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-bottom: 12px;
+    }
+
+    .contribution-tag-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 14px;
+    }
+
+    .contribution-scroll {
+        overflow-x: auto;
+        padding-bottom: 8px;
+    }
+
+    .contribution-layout {
+        display: grid;
+        grid-template-columns: 26px 1fr;
+        grid-template-rows: 16px auto;
+        width: max-content;
+    }
+
+    .contribution-months {
+        grid-column: 2;
+        grid-row: 1;
+        position: relative;
+        height: 16px;
+    }
+
+    .contribution-month-label {
+        position: absolute;
+        top: 0;
+        font-size: 10px;
+        color: var(--text-muted);
+    }
+
+    .contribution-weekday-labels {
+        grid-column: 1;
+        grid-row: 2;
+        display: grid;
+        grid-template-rows: repeat(7, 12px);
+        gap: 3px;
+        font-size: 9px;
+        color: var(--text-muted);
+        text-align: right;
+        padding-right: 4px;
+    }
+
+    .contribution-grid {
+        grid-column: 2;
+        grid-row: 2;
+        display: grid;
+        grid-template-rows: repeat(7, 12px);
+        grid-auto-flow: column;
+        grid-auto-columns: 12px;
+        gap: 3px;
+    }
+
+    .contribution-cell {
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+        background: var(--border-color);
+        transition: opacity 0.15s;
+    }
+
+    .contribution-cell[data-has-entry="true"] {
+        cursor: pointer;
+    }
+
+    .contribution-cell.contribution-cell-blank {
+        background: transparent;
+    }
+
+    .contribution-cell.dimmed {
+        opacity: 0.2;
+    }
+
+    .contribution-legend {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10px;
+        color: var(--text-muted);
+        margin-top: 10px;
+        flex-wrap: wrap;
+    }
+
+    .contribution-legend .contribution-cell {
+        cursor: default;
+    }
+
+    .container {
+        display: flex;
+        gap: 20px;
+        flex: 1;
+        min-height: 0;
+        width: 100%;
+        max-width: 1000px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .panel {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: var(--panel-bg);
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        padding: 15px;
+        overflow: hidden;
+    }
+
+    .panel-list {
+        flex: 0 0 40%;
+        min-width: 340px;
+    }
+
+    .panel-editor {
+        flex: 1 1 60%;
+        min-width: 260px;
+        overflow-y: auto;
+    }
+
+    .search-control {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text-muted);
+        background: var(--bg-color);
+        padding: 8px 12px;
+        border-radius: 20px;
+        flex-shrink: 0;
+        margin-bottom: 8px;
+    }
+
+    .search-control input {
+        border: none;
+        background: transparent;
+        font-size: 13px;
+        color: var(--text-main);
+        outline: none;
+        flex: 1;
+        font-weight: bold;
+    }
+
+    .search-control input::placeholder {
+        color: var(--text-muted);
+        font-weight: normal;
+    }
+
+    .search-nav-indicator {
+        font-size: 11px;
+        font-weight: bold;
+        color: var(--green-color);
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+
+    /* 科目絞り込み */
+    .tag-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 10px;
+        flex-shrink: 0;
+    }
+
+    .tag-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--tag-dot-color, var(--accent-color));
+        background: var(--tag-bg-soft, var(--bg-color));
+        border: 1px solid var(--tag-dot-color, var(--border-color));
+        padding: 6px 12px;
+        border-radius: 14px;
+        cursor: pointer;
+        transition: opacity 0.15s;
+    }
+
+    .tag-chip:hover { opacity: 0.8; }
+
+    .tag-chip-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--tag-dot-color, var(--accent-color));
+        flex-shrink: 0;
+    }
+
+    .tag-chip.active {
+        background: var(--tag-dot-color, var(--accent-color));
+        color: #ffffff;
+        border-color: var(--tag-dot-color, var(--accent-color));
+    }
+
+    .tag-chip.active .tag-chip-dot {
+        background: #ffffff;
+    }
+
+    .entry-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 4px;
+    }
+
+    .entry-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--tag-dot-color, var(--accent-color));
+        background: var(--tag-bg-soft, transparent);
+        border-radius: 8px;
+        padding: 1px 6px;
+    }
+
+    .entry-row.active .entry-tag {
+        color: #ffffff;
+        background: rgba(255,255,255,0.2);
+    }
+
+    /* 日付一覧 */
+    #entryList {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .month-heading {
+        font-size: 13px;
+        font-weight: bold;
+        color: var(--text-muted);
+        padding: 10px 4px 8px;
+        position: sticky;
+        top: 0;
+        background: var(--panel-bg);
+        z-index: 1;
+    }
+
+    .entry-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 12px 6px;
+        cursor: pointer;
+        font-size: 13px;
+        border-bottom: 1px solid var(--border-color);
+        min-height: 44px;
+    }
+
+    .entry-row:hover { background: var(--bg-color); }
+
+    .entry-row.active {
+        background: var(--accent-color);
+        color: #ffffff;
+    }
+
+    .entry-row.active .entry-minutes,
+    .entry-row.active .entry-badge-weekday { color: rgba(255,255,255,0.85); }
+
+    .entry-date-badge {
+        flex-shrink: 0;
+        width: 44px;
+        text-align: center;
+        line-height: 1.1;
+    }
+
+    .entry-badge-weekday {
+        font-size: 10px;
+        color: var(--text-muted);
+    }
+
+    .entry-badge-day {
+        font-size: 20px;
+        font-weight: bold;
+    }
+
+    .entry-body-col { min-width: 0; flex: 1; }
+
+    .entry-minutes {
+        font-weight: bold;
+        font-size: 13px;
+        margin-bottom: 2px;
+    }
+
+    .entry-empty {
+        font-size: 12px;
+        color: var(--text-muted);
+        padding: 20px 6px;
+        text-align: center;
+    }
+
+    /* エディタ側：日付ナビゲーション */
+    .editor-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 14px;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+    }
+
+    .date-nav-group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .btn-nav {
+        background: var(--bg-color);
+        color: var(--text-main);
+        border: 1px solid var(--border-color);
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .btn-nav:hover { border-color: var(--accent-color); color: var(--accent-color); }
+
+    .date-picker-control {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        position: relative;
+    }
+
+    .custom-date-trigger {
+        border: 1px solid var(--border-color);
+        background: var(--textarea-bg);
+        color: var(--text-main);
+        font-size: 14px;
+        font-weight: bold;
+        outline: none;
+        padding: 9px 14px;
+        border-radius: 14px;
+        cursor: pointer;
+        min-width: 130px;
+        min-height: 40px;
+        text-align: center;
+    }
+
+    .custom-date-trigger:hover { border-color: var(--accent-color); }
+
+    .calendar-popup {
+        display: none;
+        position: absolute;
+        top: 44px;
+        left: 0;
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15);
+        padding: 12px;
+        z-index: 1000;
+        width: 240px;
+    }
+
+    .calendar-popup.open { display: block; }
+
+    .calendar-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        font-size: 12px;
+        font-weight: bold;
+    }
+
+    .calendar-header button {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-weight: bold;
+        padding: 6px 10px;
+        font-size: 14px;
+    }
+
+    .calendar-header button:hover { color: var(--text-main); }
+
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 13%);
+        gap: 4px;
+        text-align: center;
+        font-size: 11px;
+    }
+
+    .calendar-day-name {
+        color: var(--text-muted);
+        font-weight: bold;
+        padding-bottom: 4px;
+    }
+
+    .calendar-day {
+        padding: 6px 0;
+        cursor: pointer;
+        border-radius: 4px;
+        font-weight: 500;
+    }
+
+    .calendar-day:hover { background-color: var(--bg-color); }
+
+    .calendar-day.selected {
+        background-color: var(--accent-color) !important;
+        color: white;
+    }
+
+    .calendar-day.empty {
+        cursor: default;
+        background: none !important;
+    }
+
+    .calendar-day.today {
+        box-shadow: inset 0 0 0 1px var(--accent-color);
+        font-weight: 700;
+    }
+
+    .calendar-day.today.selected { box-shadow: none; }
+
+    .calendar-day.has-entry::after {
+        content: '';
+        display: block;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: var(--green-color);
+        margin: 2px auto 0;
+    }
+
+    .calendar-day.selected.has-entry::after { background: #ffffff; }
+
+    .controls-right {
+        margin-left: auto;
+        display: flex;
+        gap: 6px;
+    }
+
+    .btn {
+        background-color: var(--accent-color);
+        color: white;
+        border: none;
+        padding: 9px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        min-height: 40px;
+        transition: background 0.2s;
+    }
+
+    .btn:hover { background-color: var(--accent-hover); }
+
+    .btn-danger { background-color: var(--danger-color); }
+    .btn-danger:hover { background-color: var(--danger-hover); }
+
+    .btn-new { background-color: var(--green-color); }
+    .btn-new:hover { background-color: var(--green-hover); }
+
+    .btn-save { background-color: var(--save-color); }
+    .btn-save:hover { background-color: var(--save-hover); }
+
+    .btn-submit { background-color: var(--submit-color); }
+    .btn-submit:hover { background-color: var(--submit-hover); }
+
+    .btn-json { background-color: var(--json-color); }
+    .btn-json:hover { background-color: var(--json-hover); }
+
+    .btn-json-outline {
+        background-color: transparent;
+        color: var(--json-color);
+        border: 1px solid var(--json-color);
+    }
+    .btn-json-outline:hover { background-color: var(--json-hover); color: #ffffff; border-color: var(--json-hover); }
+
+    .btn-outline {
+        background: transparent;
+        border: 1px solid var(--border-color);
+        color: var(--text-main);
+    }
+    .btn-outline:hover { border-color: var(--accent-color); color: var(--accent-color); }
+
+    /* 一覧パネル下段：TXT保存・JSONバックアップ・JSON読み込みを一列に整列 */
+    .panel-list-bottom-bar {
+        display: flex;
+        gap: 6px;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border-color);
+        flex-shrink: 0;
+    }
+
+    .panel-list-bottom-bar .btn {
+        flex: 1;
+        padding-left: 6px;
+        padding-right: 6px;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    /* 目標・進捗 */
+    .goal-panel {
+        flex-shrink: 0;
+        margin-bottom: 16px;
+        padding: 12px 14px;
+        background: var(--bg-color);
+        border-radius: 8px;
+    }
+
+    .goal-progress-bar {
+        width: 100%;
+        height: 10px;
+        background: var(--goal-track-bg);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    .goal-progress-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--accent-color);
+        border-radius: 6px;
+        transition: width 0.3s ease;
+    }
+
+    .goal-progress-fill.achieved { background: var(--green-color); }
+
+    .goal-progress-text {
+        font-size: 12px;
+        font-weight: bold;
+        color: var(--text-main);
+        margin-top: 6px;
+    }
+
+    .goal-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+        position: relative;
+    }
+
+    .weekly-summary {
+        font-size: 12px;
+        color: var(--text-muted);
+        font-weight: 600;
+    }
+
+    .goal-edit-btn {
+        font-size: 12px;
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        color: var(--text-muted);
+        padding: 6px 12px;
+        border-radius: 14px;
+        cursor: pointer;
+        min-height: 32px;
+    }
+
+    .goal-edit-btn:hover { border-color: var(--accent-color); color: var(--accent-color); }
+
+    .goal-popover {
+        display: none;
+        position: absolute;
+        top: 40px;
+        right: 0;
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15);
+        padding: 14px;
+        z-index: 1000;
+        width: 200px;
+    }
+
+    .goal-popover.open { display: block; }
+
+    .goal-popover label {
+        display: block;
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+    }
+
+    .goal-popover input {
+        width: 100%;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 10px;
+        background: var(--textarea-bg);
+        color: var(--text-main);
+    }
+
+    /* 保護者への共有モーダル */
+    .share-modal { text-align: left; }
+
+    .share-field-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: bold;
+        color: var(--text-main);
+        cursor: pointer;
+    }
+
+    .share-field-label input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+    }
+
+    /* セッション一覧 */
+    .session-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-bottom: 16px;
+    }
+
+    .session-card {
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 12px 14px;
+        background: var(--panel-bg);
+    }
+
+    .session-card-main {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .session-subject-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--tag-dot-color, var(--accent-color));
+        background: var(--tag-bg-soft, var(--bg-color));
+        padding: 5px 12px;
+        border-radius: 14px;
+    }
+
+    .session-minutes {
+        font-size: 15px;
+        font-weight: bold;
+        color: var(--text-main);
+    }
+
+    .session-note {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-top: 8px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+    }
+
+    .session-card-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+    }
+
+    .session-action-btn {
+        font-size: 12px;
+        background: var(--bg-color);
+        border: 1px solid var(--border-color);
+        color: var(--text-muted);
+        padding: 7px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        min-height: 34px;
+    }
+
+    .session-action-btn:hover { border-color: var(--accent-color); color: var(--accent-color); }
+    .session-action-btn.danger:hover { border-color: var(--danger-hover); color: var(--danger-hover); }
+
+    /* セッション追加・編集フォーム */
+    .session-form {
+        border: 2px dashed var(--border-color);
+        border-radius: 8px;
+        padding: 14px;
+    }
+
+    .session-form-title {
+        font-size: 13px;
+        font-weight: bold;
+        color: var(--text-muted);
+        margin-bottom: 10px;
+    }
+
+    .session-form-row {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    .session-form-field {
+        flex: 1 1 140px;
+        min-width: 120px;
+    }
+
+    .session-form-field label {
+        display: block;
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-bottom: 4px;
+    }
+
+    .session-form-field input,
+    .session-form-field textarea {
+        width: 100%;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 10px 12px;
+        background: var(--textarea-bg);
+        color: var(--text-main);
+        outline: none;
+        font-family: inherit;
+    }
+
+    .session-form-field input:focus,
+    .session-form-field textarea:focus {
+        border-color: var(--accent-color);
+        background: var(--textarea-focus-bg);
+    }
+
+    .session-form-field textarea {
+        resize: vertical;
+        min-height: 60px;
+        line-height: 1.6;
+    }
+
+    /* 科目・時間のタップ選択チップ */
+    .subject-picker,
+    .minutes-picker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .subject-chip,
+    .minutes-chip {
+        border: 1px solid var(--border-color);
+        background: var(--textarea-bg);
+        color: var(--text-main);
+        font-size: 13px;
+        font-weight: 700;
+        padding: 9px 14px;
+        border-radius: 18px;
+        cursor: pointer;
+        min-height: 40px;
+        font-family: inherit;
+    }
+
+    .subject-chip:hover,
+    .minutes-chip:hover { border-color: var(--accent-color); }
+
+    .minutes-chip.active {
+        background: var(--accent-color);
+        border-color: var(--accent-color);
+        color: #ffffff;
+    }
+
+    .subject-chip.active {
+        background: var(--tag-dot-color, var(--accent-color));
+        border-color: var(--tag-dot-color, var(--accent-color));
+        color: #ffffff;
+    }
+
+    .picker-current {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 6px;
+    }
+
+    .session-form-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+    }
+
+    .save-status {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 10px;
+        flex-shrink: 0;
+    }
+
+    .trumbo-toast {
+        position: fixed;
+        bottom: max(20px, env(safe-area-inset-bottom));
+        right: 20px;
+        background-color: var(--toast-bg);
+        color: var(--toast-text);
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-size: 13px;
+        z-index: 3000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        transition: opacity 0.2s;
+        max-width: calc(100vw - 40px);
+    }
+
+    @media (max-width: 768px) {
+        .container { flex-direction: column; }
+        .panel-list {
+            flex: 0 0 clamp(260px, 40vh, 400px);
+            min-width: 0;
+        }
+        .panel-editor {
+            flex: 1 1 auto;
+            min-width: 0;
+            min-height: 300px;
+        }
+    }
+</style>
+</head>
+<body>
+
+<header>
+    <h1><svg class="kesunka-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 450 450">
+  <g>
+    <rect fill="#b93e31" width="450" height="450" rx="78.95" ry="78.95"/>
+    <path fill="#e99f87" d="M78.95,0h292.1c43.57,0,78.95,35.38,78.95,78.95v270.62c0,43.57-35.38,78.95-78.95,78.95H78.95c-43.57,0-78.95-35.38-78.95-78.95V78.95C0,35.38,35.38,0,78.95,0Z"/>
+    <rect fill="#f7ddd1" width="450" height="404.83" rx="78.95" ry="78.95"/>
+    <path fill="#e99f87" d="M450,304.72c0,42.08-41.39,72.68-83.47,72.68H15.79v6.27h355.26c43.42,0,78.95-35.53,78.95-78.95h0Z"/>
+    <path fill="#e99f87" d="M450,275.94c0,42.08-41.39,72.68-83.47,72.68H15.79v6.27h355.26c43.42,0,78.95-35.53,78.95-78.95h0Z"/>
+    <path fill="#e99f87" d="M450,247.15c0,42.08-41.39,72.68-83.47,72.68H15.79v6.27h355.26c43.42,0,78.95-35.53,78.95-78.95h0Z"/>
+    <path fill="#b93e31" d="M100.66,428.51c-43.42,0-78.95-29.36-78.95-65.24s35.53-65.24,78.95-65.24h270.39c43.42,0,78.95-35.53,78.95-78.95V78.95c0-43.42-35.53-78.95-78.95-78.95H78.95C35.53,0,0,35.53,0,78.95v292.11c0,43.42,35.53,78.95,78.95,78.95h53.29c43.42,0,78.95-4.83,78.95-10.74s-35.53-10.74-78.95-10.74h-31.58Z"/>
+    <path fill="#d94b3b" d="M371.05,0H78.95c-14.99,0-28.99,4.31-40.96,11.64v283.7c13.47-10.1,30.43-16.19,48.85-16.19h284.21c43.42,0,78.95-35.53,78.95-78.95v-121.25c0-43.42-35.53-78.95-78.95-78.95Z"/>
+  </g>
+  <path fill="#f1c40f" d="M120.28,250.41c16.55-2.88,17.26-13.31,17.26-37.05V67.7c0-23.74-.72-34.17-17.26-37.05v-10.07h108.62v10.07c-16.55,2.88-17.26,13.31-17.26,37.05v41l14.39-14.75c26.62-27.34,42.8-39.92,42.8-51.43,0-6.11-3.96-10.07-11.51-11.87v-10.07h101.43v10.07c-20.14,1.08-46.4,14.75-70.5,37.77l-15.83,14.75c24.82,20.5,46.76,55.39,64.74,105.75,12.23,33.81,12.95,56.11,37.05,61.5l-.72,10.07h-109.34v-10.07c7.55-1.44,10.07-5.39,10.07-13.67,0-18.34-14.75-61.5-50.35-106.46l-12.23,8.99v74.09c0,23.74.72,34.17,17.26,37.05v10.07h-108.62v-10.07Z"/>
+</svg><span class="version-badge">kesunka v1.0.5</span></h1>
+    <div class="header-controls">
+        <div class="contribution-trigger" id="shareTrigger" onclick="openShareModal()">
+            <span>👪</span> <span>共有</span>
+        </div>
+        <div class="theme-control" onclick="toggleTheme()">
+            <span id="themeIcon">🌙</span> <span id="themeLabel">ダークモード</span>
+        </div>
+    </div>
+</header>
+
+<div class="contribution-modal-overlay" id="shareModalOverlay" onclick="closeShareModal()">
+    <div class="contribution-modal share-modal" onclick="event.stopPropagation()">
+        <div class="contribution-modal-header">
+            <h2>保護者への共有</h2>
+            <button class="contribution-close-btn" onclick="closeShareModal()">✕</button>
+        </div>
+        <div class="contribution-summary">
+            保護者が別のブラウザで「今日/週の合計時間・科目別の内訳・目標達成率・連続記録」を
+            確認できるようにします。メモなど、科目名以外の詳細は送信されません。
+        </div>
+
+        <label class="share-field-label">
+            <input type="checkbox" id="shareEnabledCheckbox"> 共有をオンにする
+        </label>
+
+        <div class="session-form-field" style="margin-top:12px;">
+            <label>Firebase設定（Webアプリの構成情報をJSONのまま貼り付け）</label>
+            <textarea id="shareFirebaseConfigInput" rows="5" placeholder='{"apiKey": "...", "projectId": "...", ...}'></textarea>
+        </div>
+
+        <div class="session-form-row" style="margin-top:10px;">
+            <div class="session-form-field">
+                <label>共有コード（保護者側にも同じものを伝えてください）</label>
+                <input type="text" id="shareCodeDisplay" placeholder="未生成">
+            </div>
+        </div>
+        <div class="session-form-actions" style="justify-content:flex-start;margin-bottom:14px;">
+            <button class="btn btn-outline" onclick="generateNewShareCode()">新しいコードを生成</button>
+            <button class="btn btn-outline" onclick="copyShareCode()">コピー</button>
+        </div>
+
+        <div id="shareStatus" class="save-status"></div>
+
+        <div class="session-form-actions" style="margin-top:10px;">
+            <button class="btn btn-submit" onclick="saveShareSettings()">保存</button>
+        </div>
+    </div>
+</div>
+
+<div class="contribution-modal-overlay" id="contributionModalOverlay" onclick="closeContributionModal()">
+    <div class="contribution-modal" onclick="event.stopPropagation()">
+        <div class="contribution-modal-header">
+            <h2>活動記録（過去1年）</h2>
+            <button class="contribution-close-btn" onclick="closeContributionModal()">✕</button>
+        </div>
+        <div class="contribution-summary" id="contributionSummary"></div>
+        <div class="contribution-tag-bar" id="contributionTagBar"></div>
+        <div class="contribution-scroll">
+            <div class="contribution-layout">
+                <div class="contribution-months" id="contributionMonths"></div>
+                <div class="contribution-weekday-labels">
+                    <span></span><span>月</span><span></span><span>水</span><span></span><span>金</span><span></span>
+                </div>
+                <div class="contribution-grid" id="contributionGrid"></div>
+            </div>
+        </div>
+        <div class="contribution-legend">
+            <span>少</span>
+            <span class="contribution-cell" id="legendCell0"></span>
+            <span class="contribution-cell" id="legendCell1"></span>
+            <span class="contribution-cell" id="legendCell2"></span>
+            <span class="contribution-cell" id="legendCell3"></span>
+            <span class="contribution-cell" id="legendCell4"></span>
+            <span>多（学習時間の四分位で判定）</span>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <div class="panel panel-list">
+        <div class="search-control">
+            <span>🔍</span>
+            <input type="text" id="searchInput" placeholder="科目・メモを検索..." oninput="onSearchInput()">
+            <span class="search-nav-indicator" id="searchNavIndicator" style="display:none;"></span>
+        </div>
+        <div class="tag-bar" id="tagBar" style="display:none;"></div>
+        <div id="entryList"></div>
+        <div class="panel-list-bottom-bar">
+            <button class="btn btn-save" onclick="exportAllDataTxt()">全件TXT保存</button>
+            <button class="btn btn-json" onclick="exportAllDataJson()">JSONバックアップ</button>
+            <button class="btn btn-json-outline" onclick="triggerJsonImport()">JSON読み込み</button>
+            <input type="file" id="jsonImportInput" accept="application/json,.json" style="display:none" onchange="handleJsonImportFile(event)">
+        </div>
+    </div>
+
+    <div class="panel panel-editor" id="panelEditor">
+        <div class="editor-toolbar">
+            <div class="date-nav-group">
+                <button class="btn-nav" onclick="changeDay(-1)" aria-label="前の日">◂</button>
+                <div class="date-picker-control">
+                    <div class="custom-date-trigger" id="dateTrigger" onclick="toggleCalendar(event)">0000-00-00</div>
+                    <div class="calendar-popup" id="calendarPopup" onclick="event.stopPropagation()">
+                        <div class="calendar-header">
+                            <button onclick="changeCalendarMonth(-1)">◂</button>
+                            <span id="calendarMonthYear"></span>
+                            <button onclick="changeCalendarMonth(1)">▸</button>
+                        </div>
+                        <div class="calendar-grid" id="calendarGrid"></div>
+                    </div>
+                </div>
+                <button class="btn-nav" onclick="changeDay(1)" aria-label="次の日">▸</button>
+            </div>
+            <div class="controls-right">
+                <button class="btn btn-new" onclick="jumpToToday()">今日</button>
+            </div>
+        </div>
+
+        <div class="goal-panel">
+            <div class="goal-progress-bar"><div class="goal-progress-fill" id="goalProgressFill"></div></div>
+            <div class="goal-progress-text" id="goalProgressText"></div>
+            <div class="goal-meta">
+                <span class="weekly-summary" id="weeklySummary"></span>
+                <span class="streak-badge" id="streakBadge">🔥 0日</span>
+                <div class="contribution-trigger contribution-trigger-goal" onclick="openContributionModal()">
+                    <span>📊</span> <span>活動記録</span>
+                </div>
+                <button class="goal-edit-btn" onclick="toggleGoalPopover(event)">目標を編集</button>
+                <div class="goal-popover" id="goalPopover" onclick="event.stopPropagation()">
+                    <label>1日の目標（分）</label>
+                    <input type="number" id="goalInput" min="0" step="5">
+                    <button class="btn btn-submit" style="width:100%" onclick="saveGoal()">保存</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="session-list" id="sessionList"></div>
+
+        <div class="session-form">
+            <div class="session-form-title" id="sessionFormTitle">セッションを追加</div>
+
+            <div class="session-form-field" style="margin-bottom:14px;">
+                <label>科目</label>
+                <div class="subject-picker" id="subjectPicker"></div>
+                <div class="picker-current" id="subjectCurrentLabel">未選択</div>
+                <input type="hidden" id="sessionSubjectInput">
+            </div>
+
+            <div class="session-form-field" style="margin-bottom:14px;">
+                <label>時間（分）</label>
+                <div class="minutes-picker" id="minutesPicker"></div>
+                <div class="picker-current" id="minutesCurrentLabel">未選択</div>
+                <input type="hidden" id="sessionMinutesInput">
+            </div>
+
+            <div class="session-form-row">
+                <div class="session-form-field" style="flex:1 1 100%;">
+                    <label>メモ（任意）</label>
+                    <textarea id="sessionNoteInput" placeholder="勉強内容、課題点、メモなど"></textarea>
+                </div>
+            </div>
+            <div class="session-form-actions">
+                <button class="btn btn-outline" id="sessionFormCancelBtn" onclick="resetSessionForm()" style="display:none;">キャンセル</button>
+                <button class="btn btn-submit" id="sessionFormSubmitBtn" onclick="submitSessionForm()">追加</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const THEME_KEY = 'studylog_theme';
+const DATA_KEY = 'studylog_data_v1';
+const SETTINGS_KEY = 'studylog_settings_v1';
+const SHARE_CONFIG_KEY = 'studylog_share_config_v1';
+const FIREBASE_SDK_VERSION = '12.15.0';
+
+const dateTriggerEl = document.getElementById('dateTrigger');
+const calendarPopupEl = document.getElementById('calendarPopup');
+const entryListEl = document.getElementById('entryList');
+const searchInputEl = document.getElementById('searchInput');
+const searchNavIndicatorEl = document.getElementById('searchNavIndicator');
+const tagBarEl = document.getElementById('tagBar');
+const jsonImportInputEl = document.getElementById('jsonImportInput');
+const sessionListEl = document.getElementById('sessionList');
+const sessionSubjectInputEl = document.getElementById('sessionSubjectInput');
+const sessionMinutesInputEl = document.getElementById('sessionMinutesInput');
+const sessionNoteInputEl = document.getElementById('sessionNoteInput');
+const sessionFormTitleEl = document.getElementById('sessionFormTitle');
+const sessionFormSubmitBtnEl = document.getElementById('sessionFormSubmitBtn');
+const sessionFormCancelBtnEl = document.getElementById('sessionFormCancelBtn');
+const subjectPickerEl = document.getElementById('subjectPicker');
+const subjectCurrentLabelEl = document.getElementById('subjectCurrentLabel');
+const minutesPickerEl = document.getElementById('minutesPicker');
+const minutesCurrentLabelEl = document.getElementById('minutesCurrentLabel');
+const goalProgressFillEl = document.getElementById('goalProgressFill');
+const goalProgressTextEl = document.getElementById('goalProgressText');
+const weeklySummaryEl = document.getElementById('weeklySummary');
+const goalPopoverEl = document.getElementById('goalPopover');
+const goalInputEl = document.getElementById('goalInput');
+const streakBadgeEl = document.getElementById('streakBadge');
+const panelEditorEl = document.getElementById('panelEditor');
+const shareModalOverlayEl = document.getElementById('shareModalOverlay');
+const shareEnabledCheckboxEl = document.getElementById('shareEnabledCheckbox');
+const shareFirebaseConfigInputEl = document.getElementById('shareFirebaseConfigInput');
+const shareCodeDisplayEl = document.getElementById('shareCodeDisplay');
+const shareStatusEl = document.getElementById('shareStatus');
+
+let allData = {};
+let settings = { dailyGoalMinutes: 60 };
+let currentDate = todayStr();
+let editingSessionId = null;
+
+let calendarViewDate = new Date();
+
+let searchKeyword = '';
+let selectedSubject = null;
+let currentNavIdx = -1;
+
+let shareConfig = { enabled: false, firebaseConfig: null, shareCode: null };
+let shareSdk = null;
+let shareWriteDebounceTimer = null;
+
+function todayStr() { return dateStrFromDate(new Date()); }
+
+function dateStrFromDate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function formatDateLabel(dateStr) {
+    const [y, m, d] = dateStr.split('-');
+    const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
+    const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+    return `${y}年${Number(m)}月${Number(d)}日（${weekdays[dateObj.getDay()]}）`;
+}
+
+function genId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9);
+}
+
+/* ==========================================================================
+ * テーマ
+ * ========================================================================== */
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    setTheme(currentTheme !== 'dark' ? 'dark' : 'light');
+}
+
+function setTheme(theme) {
+    const themeIcon = document.getElementById('themeIcon');
+    const themeLabel = document.getElementById('themeLabel');
+    if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        themeIcon.textContent = '☀️';
+        themeLabel.textContent = 'ライトモード';
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        themeIcon.textContent = '🌙';
+        themeLabel.textContent = 'ダークモード';
+    }
+    try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+
+    if (typeof renderSubjectBar === 'function' && tagBarEl) {
+        renderSubjectBar();
+        renderEntryList();
+        renderSessionList();
+    }
+}
+
+/* ==========================================================================
+ * ストレージ
+ * ========================================================================== */
+function loadAllData() {
+    try {
+        const raw = localStorage.getItem(DATA_KEY);
+        if (!raw) return {};
+        return JSON.parse(raw);
+    } catch (e) {
+        console.error('データの取得に失敗:', e);
+        return {};
+    }
+}
+
+function persistAllData() {
+    try {
+        localStorage.setItem(DATA_KEY, JSON.stringify(allData));
+        return true;
+    } catch (e) {
+        console.error('localStorageへの保存に失敗しました:', e);
+        showToast('保存に失敗しました。ブラウザの容量をご確認ください。');
+        return false;
+    }
+}
+
+function loadSettings() {
+    try {
+        const raw = localStorage.getItem(SETTINGS_KEY);
+        if (!raw) return { dailyGoalMinutes: 60 };
+        const parsed = JSON.parse(raw);
+        return { dailyGoalMinutes: Number.isFinite(parsed.dailyGoalMinutes) ? parsed.dailyGoalMinutes : 60 };
+    } catch (e) {
+        return { dailyGoalMinutes: 60 };
+    }
+}
+
+function persistSettings() {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) {}
+}
+
+function ensureDay(dateStr) {
+    if (!allData[dateStr]) allData[dateStr] = { sessions: [] };
+    return allData[dateStr];
+}
+
+function getDaySessions(dateStr) {
+    return (allData[dateStr] && allData[dateStr].sessions) ? allData[dateStr].sessions : [];
+}
+
+function getDayTotalMinutes(dateStr) {
+    return getDaySessions(dateStr).reduce((sum, s) => sum + (Number(s.minutes) || 0), 0);
+}
+
+function getDaySubjects(dateStr) {
+    return [...new Set(getDaySessions(dateStr).map(s => s.subject))];
+}
+
+function addSession(dateStr, subject, minutes, note) {
+    const day = ensureDay(dateStr);
+    day.sessions.push({ id: genId(), subject, minutes, note, createdAt: Date.now() });
+    persistAllData();
+}
+
+function updateSession(dateStr, id, fields) {
+    const day = allData[dateStr];
+    if (!day) return;
+    const idx = day.sessions.findIndex(s => s.id === id);
+    if (idx === -1) return;
+    day.sessions[idx] = Object.assign({}, day.sessions[idx], fields);
+    persistAllData();
+}
+
+function deleteSession(dateStr, id) {
+    const day = allData[dateStr];
+    if (!day) return;
+    day.sessions = day.sessions.filter(s => s.id !== id);
+    if (day.sessions.length === 0) delete allData[dateStr];
+    persistAllData();
+}
+
+/* ==========================================================================
+ * 科目（固定リスト）・時間プリセットの選択肢
+ * ========================================================================== */
+const SUBJECT_OPTIONS = ['英語', '国語', '言語文化', '地理', '歴史', '数学', '化学', '生物', '情報', '読書・映画', '宿題・課題', 'そのほか'];
+const MINUTES_PRESETS = [30, 45, 60, 90, 120, 150, 180];
+
+/* ==========================================================================
+ * 科目（カテゴリ）の色分け・並び順
+ * 科目は固定リスト（SUBJECT_OPTIONS）から選ぶ方式のため、色もその並び順を
+ * 基準に8色パレットから割り当てる（旧バージョンの「データ内での登場順」
+ * 方式から変更）。リスト外の科目名（旧データ・JSONインポート由来）が
+ * 残っている場合の後方互換のため、文字列ハッシュによるフォールバックも維持する。
+ * ========================================================================== */
+const FLAT_UI_TAG_COLORS = [
+    '#1abc9c', '#e74c3c', '#3498db', '#34495e',
+    '#9b59b6', '#2ecc71', '#f39c12', '#7f8c8d'
+];
+
+const DARK_MODE_TAG_COLOR_OVERRIDES = {
+    '#34495e': '#7f9cbd'
+};
+
+const TAG_COLOR_FAMILY = {
+    '#1abc9c': 'green', '#2ecc71': 'green',
+    '#3498db': 'blue',
+    '#9b59b6': 'purple',
+    '#f39c12': 'orange',
+    '#e74c3c': 'red',
+    '#34495e': 'neutral', '#7f8c8d': 'neutral'
+};
+
+function tagHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+    }
+    return hash;
+}
+
+function subjectColor(subject) {
+    const idx = SUBJECT_OPTIONS.indexOf(subject);
+    const baseColor = (idx === -1)
+        ? FLAT_UI_TAG_COLORS[tagHash(subject) % FLAT_UI_TAG_COLORS.length]
+        : FLAT_UI_TAG_COLORS[idx % FLAT_UI_TAG_COLORS.length];
+
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (isDark && DARK_MODE_TAG_COLOR_OVERRIDES[baseColor]) {
+        return DARK_MODE_TAG_COLOR_OVERRIDES[baseColor];
+    }
+    return baseColor;
+}
+
+function subjectBgSoft(subject) {
+    const hex = subjectColor(subject);
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const alpha = isDark ? 0.28 : 0.15;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function subjectFamily(subject) {
+    return TAG_COLOR_FAMILY[subjectColor(subject)] || 'other';
+}
+
+function arrangeAvoidingAdjacentFamily(items) {
+    if (items.length <= 1) return items.slice();
+    const groups = {};
+    items.forEach(item => {
+        const fam = subjectFamily(item);
+        if (!groups[fam]) groups[fam] = [];
+        groups[fam].push(item);
+    });
+    const result = [];
+    let lastFamily = null;
+    while (result.length < items.length) {
+        const candidates = Object.keys(groups).filter(f => groups[f].length > 0);
+        if (candidates.length === 0) break;
+        candidates.sort((a, b) => groups[b].length - groups[a].length);
+        const chosen = candidates.find(f => f !== lastFamily) || candidates[0];
+        result.push(groups[chosen].shift());
+        lastFamily = chosen;
+    }
+    return result;
+}
+
+function getAllSubjectsSorted() {
+    const count = {};
+    Object.keys(allData).forEach(dateStr => {
+        getDaySessions(dateStr).forEach(s => {
+            count[s.subject] = (count[s.subject] || 0) + 1;
+        });
+    });
+    return Object.keys(count).sort((a, b) => count[b] - count[a]);
+}
+
+function renderSubjectBar() {
+    const subjects = getAllSubjectsSorted();
+    if (subjects.length === 0) {
+        tagBarEl.style.display = 'none';
+        tagBarEl.innerHTML = '';
+        return;
+    }
+    tagBarEl.style.display = 'flex';
+    tagBarEl.innerHTML = subjects.map(s => `
+        <span class="tag-chip ${s === selectedSubject ? 'active' : ''}" style="--tag-dot-color:${subjectColor(s)};--tag-bg-soft:${subjectBgSoft(s)}" onclick="toggleSubjectFilter('${escapeForInlineHandler(s)}')">
+            <span class="tag-chip-dot"></span>${escapeHtml(s)}
+        </span>
+    `).join('');
+}
+
+function toggleSubjectFilter(subject) {
+    selectedSubject = (selectedSubject === subject) ? null : subject;
+    currentNavIdx = -1;
+    renderSubjectBar();
+    renderEntryList();
+}
+
+function escapeForInlineHandler(str) {
+    return escapeHtml(str.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>'"]/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[m]));
+}
+
+/* ==========================================================================
+ * 日付一覧
+ * ========================================================================== */
+const WEEKDAYS_JA = ['日', '月', '火', '水', '木', '金', '土'];
+
+function getFilteredDates() {
+    let dates = Object.keys(allData).filter(d => getDaySessions(d).length > 0);
+
+    if (selectedSubject) {
+        dates = dates.filter(d => getDaySessions(d).some(s => s.subject === selectedSubject));
+    }
+    if (searchKeyword) {
+        const lower = searchKeyword.toLowerCase();
+        dates = dates.filter(d => getDaySessions(d).some(s =>
+            (s.subject || '').toLowerCase().includes(lower) || (s.note || '').toLowerCase().includes(lower)
+        ));
+    }
+
+    return dates.sort((a, b) => b.localeCompare(a));
+}
+
+function renderEntryList() {
+    const dates = getFilteredDates();
+
+    if (dates.length === 0) {
+        const msg = (searchKeyword || selectedSubject) ? '該当する記録が見つかりません' : 'まだ学習ログがありません';
+        entryListEl.innerHTML = `<div class="entry-empty">${msg}</div>`;
+        updateNavIndicator();
+        return;
+    }
+
+    let html = '';
+    let lastMonthKey = null;
+
+    dates.forEach(dateStr => {
+        const [y, m, d] = dateStr.split('-');
+        const monthKey = `${y}-${m}`;
+
+        if (monthKey !== lastMonthKey) {
+            html += `<div class="month-heading">${y}年${Number(m)}月</div>`;
+            lastMonthKey = monthKey;
+        }
+
+        const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
+        const weekday = WEEKDAYS_JA[dateObj.getDay()];
+        const isActive = dateStr === currentDate;
+        const total = getDayTotalMinutes(dateStr);
+        const subjects = arrangeAvoidingAdjacentFamily(getDaySubjects(dateStr));
+        const tagsHtml = subjects.length > 0
+            ? `<div class="entry-tags">${subjects.map(s => `<span class="entry-tag" style="--tag-dot-color:${subjectColor(s)};--tag-bg-soft:${subjectBgSoft(s)}">${escapeHtml(s)}</span>`).join('')}</div>`
+            : '';
+
+        html += `
+            <div class="entry-row ${isActive ? 'active' : ''}" data-date="${dateStr}" onclick="selectDate('${dateStr}')">
+                <div class="entry-date-badge">
+                    <div class="entry-badge-weekday">${weekday}</div>
+                    <div class="entry-badge-day">${Number(d)}</div>
+                </div>
+                <div class="entry-body-col">
+                    <div class="entry-minutes">${total}分</div>
+                    ${tagsHtml}
+                </div>
+            </div>`;
+    });
+
+    entryListEl.innerHTML = html;
+    updateNavIndicator();
+}
+
+/* ==========================================================================
+ * 日付選択・ナビゲーション
+ * ========================================================================== */
+function selectDate(dateStr) {
+    currentDate = dateStr;
+    dateTriggerEl.textContent = dateStr;
+    resetSessionForm();
+    refreshAll();
+}
+
+function changeDay(delta) {
+    const d = new Date(currentDate + 'T00:00:00');
+    d.setDate(d.getDate() + delta);
+    selectDate(dateStrFromDate(d));
+}
+
+function jumpToToday() {
+    selectDate(todayStr());
+}
+
+/* ==========================================================================
+ * カレンダーポップアップ
+ * ========================================================================== */
+function toggleCalendar(e) {
+    e.stopPropagation();
+    if (calendarPopupEl.classList.contains('open')) {
+        calendarPopupEl.classList.remove('open');
+        return;
+    }
+    const [y, m] = currentDate.split('-').map(Number);
+    calendarViewDate = new Date(y, m - 1, 1);
+    renderCalendar();
+    calendarPopupEl.classList.add('open');
+    currentNavIdx = -1;
+}
+
+function changeCalendarMonth(dir) {
+    calendarViewDate.setMonth(calendarViewDate.getMonth() + dir);
+    renderCalendar();
+}
+
+function renderCalendar() {
+    const grid = document.getElementById('calendarGrid');
+    const monthYearEl = document.getElementById('calendarMonthYear');
+    grid.innerHTML = '';
+
+    const year = calendarViewDate.getFullYear();
+    const month = calendarViewDate.getMonth();
+    monthYearEl.textContent = `${year}年 ${month + 1}月`;
+
+    WEEKDAYS_JA.forEach(d => {
+        const el = document.createElement('div');
+        el.className = 'calendar-day-name';
+        el.textContent = d;
+        grid.appendChild(el);
+    });
+
+    const firstDayIndex = new Date(year, month, 1).getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+
+    for (let i = 0; i < firstDayIndex; i++) {
+        const el = document.createElement('div');
+        el.className = 'calendar-day empty';
+        grid.appendChild(el);
+    }
+
+    for (let day = 1; day <= totalDays; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const el = document.createElement('div');
+        el.className = 'calendar-day';
+        el.textContent = day;
+
+        if (dateStr === todayStr()) el.classList.add('today');
+        if (dateStr === currentDate) el.classList.add('selected');
+        if (getDaySessions(dateStr).length > 0) el.classList.add('has-entry');
+
+        el.onclick = () => {
+            calendarPopupEl.classList.remove('open');
+            selectDate(dateStr);
+        };
+
+        grid.appendChild(el);
+    }
+}
+
+document.addEventListener('click', () => {
+    calendarPopupEl.classList.remove('open');
+    goalPopoverEl.classList.remove('open');
+});
+
+/* ==========================================================================
+ * セッション一覧・追加/編集フォーム
+ * ========================================================================== */
+function renderSessionList() {
+    const sessions = getDaySessions(currentDate);
+    if (sessions.length === 0) {
+        sessionListEl.innerHTML = `<div class="entry-empty">この日の記録はまだありません</div>`;
+        return;
+    }
+    sessionListEl.innerHTML = sessions.map(s => `
+        <div class="session-card" data-id="${s.id}">
+            <div class="session-card-main">
+                <span class="session-subject-chip" style="--tag-dot-color:${subjectColor(s.subject)};--tag-bg-soft:${subjectBgSoft(s.subject)}">
+                    <span class="tag-chip-dot"></span>${escapeHtml(s.subject)}
+                </span>
+                <span class="session-minutes">${s.minutes}分</span>
+            </div>
+            ${s.note ? `<div class="session-note">${escapeHtml(s.note)}</div>` : ''}
+            <div class="session-card-actions">
+                <button class="session-action-btn" onclick="editSession('${s.id}')">✎ 編集</button>
+                <button class="session-action-btn danger" onclick="removeSession('${s.id}')">🗑 削除</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function editSession(id) {
+    const session = getDaySessions(currentDate).find(s => s.id === id);
+    if (!session) return;
+    editingSessionId = id;
+    sessionSubjectInputEl.value = session.subject;
+    sessionMinutesInputEl.value = session.minutes;
+    sessionNoteInputEl.value = session.note || '';
+    syncSubjectChipUI();
+    syncMinutesChipUI();
+    sessionFormTitleEl.textContent = 'セッションを編集';
+    sessionFormSubmitBtnEl.textContent = '更新';
+    sessionFormCancelBtnEl.style.display = '';
+    subjectPickerEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+function removeSession(id) {
+    if (!confirm('このセッションを削除しますか？')) return;
+    deleteSession(currentDate, id);
+    if (editingSessionId === id) resetSessionForm();
+    refreshAll();
+    pushShareSummary();
+    showToast('削除しました');
+}
+
+function resetSessionForm() {
+    editingSessionId = null;
+    sessionSubjectInputEl.value = '';
+    sessionMinutesInputEl.value = '';
+    sessionNoteInputEl.value = '';
+    syncSubjectChipUI();
+    syncMinutesChipUI();
+    sessionFormTitleEl.textContent = 'セッションを追加';
+    sessionFormSubmitBtnEl.textContent = '追加';
+    sessionFormCancelBtnEl.style.display = 'none';
+}
+
+/* ==========================================================================
+ * 科目・時間のタップ選択チップ
+ * ========================================================================== */
+function renderSubjectPicker() {
+    subjectPickerEl.innerHTML = SUBJECT_OPTIONS.map(s => `
+        <button type="button" class="subject-chip" data-subject="${escapeHtml(s)}" style="--tag-dot-color:${subjectColor(s)}" onclick="selectSubject('${escapeForInlineHandler(s)}')">${escapeHtml(s)}</button>
+    `).join('');
+}
+
+function selectSubject(subject) {
+    sessionSubjectInputEl.value = subject;
+    syncSubjectChipUI();
+}
+
+function syncSubjectChipUI() {
+    const val = sessionSubjectInputEl.value;
+    subjectPickerEl.querySelectorAll('.subject-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.dataset.subject === val);
+    });
+    subjectCurrentLabelEl.textContent = val ? `選択中: ${val}` : '未選択';
+}
+
+function renderMinutesPicker() {
+    minutesPickerEl.innerHTML = MINUTES_PRESETS.map(m => `
+        <button type="button" class="minutes-chip" data-minutes="${m}" onclick="selectMinutes(${m})">${m}分</button>
+    `).join('');
+}
+
+function selectMinutes(minutes) {
+    sessionMinutesInputEl.value = minutes;
+    syncMinutesChipUI();
+}
+
+function syncMinutesChipUI() {
+    const val = parseInt(sessionMinutesInputEl.value, 10);
+    minutesPickerEl.querySelectorAll('.minutes-chip').forEach(chip => {
+        chip.classList.toggle('active', Number(chip.dataset.minutes) === val);
+    });
+    minutesCurrentLabelEl.textContent = (Number.isFinite(val) && val > 0) ? `選択中: ${val}分` : '未選択';
+}
+
+function submitSessionForm() {
+    const subject = sessionSubjectInputEl.value.trim();
+    const minutes = parseInt(sessionMinutesInputEl.value, 10);
+    const note = sessionNoteInputEl.value.trim();
+
+    if (!subject) { showToast('科目を選択してください'); return; }
+    if (!Number.isFinite(minutes) || minutes <= 0) { showToast('時間を選択してください'); return; }
+
+    if (editingSessionId) {
+        updateSession(currentDate, editingSessionId, { subject, minutes, note });
+        showToast('更新しました');
+    } else {
+        addSession(currentDate, subject, minutes, note);
+        showToast(`${formatDateLabel(currentDate)} に記録しました`);
+    }
+
+    resetSessionForm();
+    refreshAll();
+    pushShareSummary();
+}
+
+/* ==========================================================================
+ * 目標・進捗
+ * ========================================================================== */
+function renderGoalProgress() {
+    const total = getDayTotalMinutes(currentDate);
+    const goal = settings.dailyGoalMinutes || 0;
+    const pct = goal > 0 ? Math.min(100, Math.round((total / goal) * 100)) : (total > 0 ? 100 : 0);
+    goalProgressFillEl.style.width = pct + '%';
+    goalProgressTextEl.textContent = goal > 0 ? `${formatDateLabel(currentDate)}の目標: ${total}/${goal}分` : `${formatDateLabel(currentDate)}の学習時間: ${total}分`;
+    goalProgressFillEl.classList.toggle('achieved', goal > 0 && total >= goal);
+}
+
+function renderWeeklySummary() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let total = 0;
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        total += getDayTotalMinutes(dateStrFromDate(d));
+    }
+    const goal = (settings.dailyGoalMinutes || 0) * 7;
+    weeklySummaryEl.textContent = goal > 0 ? `直近7日: ${total}/${goal}分` : `直近7日: ${total}分`;
+}
+
+function toggleGoalPopover(e) {
+    e.stopPropagation();
+    goalInputEl.value = settings.dailyGoalMinutes || '';
+    goalPopoverEl.classList.toggle('open');
+}
+
+function saveGoal() {
+    const v = parseInt(goalInputEl.value, 10);
+    settings.dailyGoalMinutes = Number.isFinite(v) && v > 0 ? v : 0;
+    persistSettings();
+    goalPopoverEl.classList.remove('open');
+    renderGoalProgress();
+    renderWeeklySummary();
+    pushShareSummary();
+    showToast('目標を更新しました');
+}
+
+/* ==========================================================================
+ * 連続記録（ストリーク）
+ * ========================================================================== */
+function computeStreak() {
+    const activeDates = Object.keys(allData).filter(d => getDayTotalMinutes(d) > 0).sort();
+    if (activeDates.length === 0) return { current: 0, best: 0 };
+
+    const dateSet = new Set(activeDates);
+    let best = 0, run = 0, prev = null;
+    activeDates.forEach(d => {
+        if (prev) {
+            const prevDate = new Date(prev + 'T00:00:00');
+            const curDate = new Date(d + 'T00:00:00');
+            const diffDays = Math.round((curDate - prevDate) / 86400000);
+            run = diffDays === 1 ? run + 1 : 1;
+        } else {
+            run = 1;
+        }
+        if (run > best) best = run;
+        prev = d;
+    });
+
+    let current = 0;
+    let cursor = new Date();
+    cursor.setHours(0, 0, 0, 0);
+    let cursorStr = dateStrFromDate(cursor);
+    if (!dateSet.has(cursorStr)) {
+        cursor.setDate(cursor.getDate() - 1);
+        cursorStr = dateStrFromDate(cursor);
+    }
+    while (dateSet.has(cursorStr)) {
+        current++;
+        cursor.setDate(cursor.getDate() - 1);
+        cursorStr = dateStrFromDate(cursor);
+    }
+
+    return { current, best };
+}
+
+function renderStreak() {
+    const { current, best } = computeStreak();
+    streakBadgeEl.textContent = `🔥 ${current}日連続`;
+    streakBadgeEl.title = `最長記録: ${best}日`;
+}
+
+/* ==========================================================================
+ * TXT / JSON エクスポート・インポート
+ * ========================================================================== */
+function downloadBlob(blob, fileName) {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+}
+
+function exportAllDataTxt() {
+    const dates = Object.keys(allData).filter(d => getDaySessions(d).length > 0).sort((a, b) => a.localeCompare(b));
+    if (dates.length === 0) {
+        showToast('保存されている記録がありません');
+        return;
+    }
+    const content = dates.map(dateStr => {
+        const sessions = getDaySessions(dateStr);
+        const lines = sessions.map(s => `・${s.subject} ${s.minutes}分${s.note ? `\n  ${s.note}` : ''}`).join('\n');
+        const total = getDayTotalMinutes(dateStr);
+        return `${formatDateLabel(dateStr)}（合計${total}分）\n\n${lines}`;
+    }).join('\n\n' + '-'.repeat(20) + '\n\n');
+
+    const now = new Date();
+    const suffix = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const fileName = `studylog_all_${suffix}.txt`;
+    downloadBlob(new Blob([content], { type: 'text/plain;charset=utf-8;' }), fileName);
+    showToast(`${fileName} を保存しました`);
+}
+
+function exportAllDataJson() {
+    const dateCount = Object.keys(allData).filter(d => getDaySessions(d).length > 0).length;
+    if (dateCount === 0) {
+        showToast('保存されている記録がありません');
+        return;
+    }
+    const payload = {
+        app: 'StudyLog',
+        exportedAt: new Date().toISOString(),
+        data: allData,
+        settings: settings
+    };
+    const now = new Date();
+    const suffix = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const fileName = `studylog_backup_${suffix}.json`;
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8;' }), fileName);
+    showToast(`${fileName} を保存しました`);
+}
+
+function triggerJsonImport() {
+    jsonImportInputEl.value = '';
+    jsonImportInputEl.click();
+}
+
+function handleJsonImportFile(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+        let parsed;
+        try {
+            parsed = JSON.parse(reader.result);
+        } catch (e) {
+            showToast('JSONファイルの読み込みに失敗しました（形式が不正です）');
+            return;
+        }
+
+        const importedData = (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.data && typeof parsed.data === 'object')
+            ? parsed.data
+            : parsed;
+
+        if (!importedData || typeof importedData !== 'object' || Array.isArray(importedData)) {
+            showToast('JSONファイルの形式が不正です');
+            return;
+        }
+
+        const validData = {};
+        let invalidCount = 0;
+        Object.keys(importedData).forEach(key => {
+            const value = importedData[key];
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || !value || !Array.isArray(value.sessions)) {
+                invalidCount++;
+                return;
+            }
+            const validSessions = value.sessions.filter(s =>
+                s && typeof s.subject === 'string' && s.subject.trim() && Number.isFinite(Number(s.minutes)) && Number(s.minutes) > 0
+            ).map(s => ({
+                id: (typeof s.id === 'string' && s.id) ? s.id : genId(),
+                subject: s.subject.trim(),
+                minutes: Number(s.minutes),
+                note: typeof s.note === 'string' ? s.note : '',
+                createdAt: Number.isFinite(s.createdAt) ? s.createdAt : Date.now()
+            }));
+            if (validSessions.length > 0) {
+                validData[key] = { sessions: validSessions };
+            } else {
+                invalidCount++;
+            }
+        });
+
+        const importCount = Object.keys(validData).length;
+        if (importCount === 0) {
+            showToast('読み込める学習ログが見つかりませんでした');
+            return;
+        }
+
+        const confirmed = confirm(`${importCount}日分の記録を読み込みます。日付が重複する日は上書きされます。よろしいですか？`);
+        if (!confirmed) return;
+
+        allData = Object.assign({}, allData, validData);
+
+        if (parsed && parsed.settings && Number.isFinite(parsed.settings.dailyGoalMinutes)) {
+            settings.dailyGoalMinutes = parsed.settings.dailyGoalMinutes;
+            persistSettings();
+        }
+
+        const ok = persistAllData();
+        if (ok) {
+            resetSessionForm();
+            refreshAll();
+            pushShareSummary();
+            const msg = invalidCount > 0
+                ? `${importCount}日分を読み込みました（${invalidCount}件は形式不正のためスキップ）`
+                : `${importCount}日分の記録を読み込みました`;
+            showToast(msg);
+        }
+    };
+    reader.onerror = () => {
+        showToast('ファイルの読み込みに失敗しました');
+    };
+    reader.readAsText(file);
+}
+
+/* ==========================================================================
+ * 活動記録（GitHub風ヒートマップ）：合計学習時間（分）ベース
+ * ========================================================================== */
+const MONTH_LABELS_JA = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+const CONTRIBUTION_BASE_COLOR = '#2ecc71';
+const CONTRIBUTION_LEVEL_ALPHA = [0, 0.28, 0.52, 0.76, 1.0];
+let contributionSelectedSubject = null;
+
+function getContributionDays() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const days = [];
+    for (let i = 364; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        days.push({ dateStr: dateStrFromDate(d), dateObj: d, weekday: d.getDay() });
+    }
+    return days;
+}
+
+function computeIntensityThresholds(counts) {
+    const positive = counts.filter(c => c > 0).sort((a, b) => a - b);
+    if (positive.length === 0) return [0, 0, 0];
+    const pct = p => positive[Math.min(positive.length - 1, Math.floor(positive.length * p))];
+    return [pct(0.25), pct(0.5), pct(0.75)];
+}
+
+function intensityLevel(count, thresholds) {
+    if (count <= 0) return 0;
+    if (count <= thresholds[0]) return 1;
+    if (count <= thresholds[1]) return 2;
+    if (count <= thresholds[2]) return 3;
+    return 4;
+}
+
+function intensityColor(level) {
+    if (level === 0) return null;
+    const hex = CONTRIBUTION_BASE_COLOR;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${CONTRIBUTION_LEVEL_ALPHA[level]})`;
+}
+
+function renderContributionGraph() {
+    const days = getContributionDays();
+    const counts = days.map(d => getDayTotalMinutes(d.dateStr));
+    const thresholds = computeIntensityThresholds(counts);
+
+    const leadingBlanks = days[0].weekday;
+    const cells = [];
+    for (let i = 0; i < leadingBlanks; i++) cells.push(null);
+    days.forEach((d, idx) => cells.push({ dateStr: d.dateStr, dateObj: d.dateObj, weekday: d.weekday, count: counts[idx] }));
+
+    const totalCols = Math.ceil(cells.length / 7);
+    while (cells.length < totalCols * 7) cells.push(null);
+
+    const highlightSet = contributionSelectedSubject
+        ? new Set(Object.keys(allData).filter(d => getDaySessions(d).some(s => s.subject === contributionSelectedSubject)))
+        : null;
+
+    const cellsHtml = cells.map(c => {
+        if (!c) return `<div class="contribution-cell contribution-cell-blank"></div>`;
+        const level = intensityLevel(c.count, thresholds);
+        const color = intensityColor(level);
+        const dimmed = highlightSet && !highlightSet.has(c.dateStr);
+        const style = color ? ` style="background-color:${color}"` : '';
+        const title = c.count > 0
+            ? `${c.dateStr}（${WEEKDAYS_JA[c.weekday]}）: ${c.count}分`
+            : `${c.dateStr}（${WEEKDAYS_JA[c.weekday]}）: 記録なし`;
+        return `<div class="contribution-cell${dimmed ? ' dimmed' : ''}"${style} title="${escapeHtml(title)}" data-has-entry="${c.count > 0}" onclick="handleContributionCellClick('${c.dateStr}')"></div>`;
+    }).join('');
+
+    const colWidth = 15;
+    let lastMonth = null;
+    const monthLabelsHtml = [];
+    for (let col = 0; col < totalCols; col++) {
+        let rep = null;
+        for (let r = 0; r < 7; r++) {
+            const c = cells[col * 7 + r];
+            if (c) { rep = c; break; }
+        }
+        if (rep) {
+            const month = rep.dateObj.getMonth();
+            if (month !== lastMonth) {
+                monthLabelsHtml.push(`<span class="contribution-month-label" style="left:${col * colWidth}px">${MONTH_LABELS_JA[month]}</span>`);
+                lastMonth = month;
+            }
+        }
+    }
+
+    document.getElementById('contributionMonths').innerHTML = monthLabelsHtml.join('');
+    const gridEl = document.getElementById('contributionGrid');
+    gridEl.innerHTML = cellsHtml;
+    gridEl.style.gridTemplateColumns = `repeat(${totalCols}, 12px)`;
+
+    document.getElementById('contributionTagBar').innerHTML = getAllSubjectsSorted().map(s => `
+        <span class="tag-chip ${s === contributionSelectedSubject ? 'active' : ''}" style="--tag-dot-color:${subjectColor(s)};--tag-bg-soft:${subjectBgSoft(s)}" onclick="toggleContributionSubjectFilter('${escapeForInlineHandler(s)}')">
+            <span class="tag-chip-dot"></span>${escapeHtml(s)}
+        </span>
+    `).join('');
+
+    const writtenDays = counts.filter(c => c > 0).length;
+    const totalMinutes = counts.reduce((a, b) => a + b, 0);
+    document.getElementById('contributionSummary').textContent = `過去1年間で ${writtenDays} 日 学習（合計${totalMinutes}分）`;
+
+    for (let level = 0; level <= 4; level++) {
+        const el = document.getElementById(`legendCell${level}`);
+        if (!el) continue;
+        const color = intensityColor(level);
+        if (color) el.style.backgroundColor = color;
+    }
+}
+
+function toggleContributionSubjectFilter(subject) {
+    contributionSelectedSubject = (contributionSelectedSubject === subject) ? null : subject;
+    renderContributionGraph();
+}
+
+function handleContributionCellClick(dateStr) {
+    if (getDaySessions(dateStr).length === 0) return;
+    closeContributionModal();
+    selectDate(dateStr);
+}
+
+function openContributionModal() {
+    contributionSelectedSubject = null;
+    renderContributionGraph();
+    document.getElementById('contributionModalOverlay').classList.add('open');
+}
+
+function closeContributionModal() {
+    document.getElementById('contributionModalOverlay').classList.remove('open');
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('contributionModalOverlay').classList.contains('open')) {
+        closeContributionModal();
+    }
+    if (shareModalOverlayEl.classList.contains('open')) {
+        closeShareModal();
+    }
+});
+
+/* ==========================================================================
+ * 検索・矢印キー巡回
+ * ========================================================================== */
+let searchDebounceTimer = null;
+
+function onSearchInput() {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+        searchKeyword = searchInputEl.value.trim();
+        currentNavIdx = -1;
+        renderEntryList();
+    }, 250);
+}
+
+function updateNavIndicator() {
+    if (!searchKeyword && !selectedSubject) {
+        searchNavIndicatorEl.style.display = 'none';
+        return;
+    }
+    const matches = entryListEl.querySelectorAll('.entry-row');
+    if (matches.length === 0) {
+        searchNavIndicatorEl.style.display = 'none';
+        return;
+    }
+    if (currentNavIdx < 0) {
+        searchNavIndicatorEl.textContent = `${matches.length}件`;
+    } else {
+        searchNavIndicatorEl.textContent = `${currentNavIdx + 1}/${matches.length}件`;
+    }
+    searchNavIndicatorEl.style.display = 'inline';
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const active = document.activeElement;
+    if (active === sessionSubjectInputEl || active === sessionMinutesInputEl || active === sessionNoteInputEl) return;
+    if (document.getElementById('contributionModalOverlay').classList.contains('open')) return;
+
+    const rows = entryListEl.querySelectorAll('.entry-row');
+    if (rows.length === 0) return;
+
+    e.preventDefault();
+
+    if (currentNavIdx >= 0 && currentNavIdx < rows.length) {
+        rows[currentNavIdx].classList.remove('active');
+    }
+
+    if (e.key === 'ArrowDown') {
+        currentNavIdx = (currentNavIdx + 1) % rows.length;
+    } else {
+        currentNavIdx = currentNavIdx <= 0 ? rows.length - 1 : currentNavIdx - 1;
+    }
+
+    const targetRow = rows[currentNavIdx];
+    targetRow.classList.add('active');
+    targetRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+    updateNavIndicator();
+});
+
+/* ==========================================================================
+ * タッチ操作：スワイプで前後日に移動
+ * ========================================================================== */
+let touchStartX = null;
+
+panelEditorEl.addEventListener('touchstart', (e) => {
+    touchStartX = e.changedTouches[0].clientX;
+}, { passive: true });
+
+panelEditorEl.addEventListener('touchend', (e) => {
+    if (touchStartX === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    touchStartX = null;
+
+    const active = document.activeElement;
+    if (active === sessionSubjectInputEl || active === sessionMinutesInputEl || active === sessionNoteInputEl) return;
+    if (Math.abs(dx) < 60) return;
+
+    if (dx > 0) changeDay(-1); else changeDay(1);
+}, { passive: true });
+
+/* ==========================================================================
+ * 通知トースト
+ * ========================================================================== */
+let activeToast = null;
+function showToast(message) {
+    if (activeToast) activeToast.remove();
+    const toast = document.createElement('div');
+    toast.className = 'trumbo-toast';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    activeToast = toast;
+    setTimeout(() => {
+        if (activeToast === toast) {
+            toast.style.opacity = '0';
+            setTimeout(() => { toast.remove(); if (activeToast === toast) activeToast = null; }, 200);
+        }
+    }, 2200);
+}
+
+/* ==========================================================================
+ * 保護者への共有（Firestoreへの要約送信）
+ * 全データを同期するのではなく、今日/週の合計時間・目標達成率・連続記録・
+ * 直近7日間の分数のみを1つの要約ドキュメントとしてFirestoreへ書き込む。
+ * 保護者側（parent-view.html）はこのドキュメントを購読して閲覧するだけで、
+ * 書き込みは行わない。
+ * ========================================================================== */
+function loadShareConfig() {
+    try {
+        const raw = localStorage.getItem(SHARE_CONFIG_KEY);
+        if (!raw) return { enabled: false, firebaseConfig: null, shareCode: null };
+        const parsed = JSON.parse(raw);
+        return {
+            enabled: !!parsed.enabled,
+            firebaseConfig: (parsed.firebaseConfig && typeof parsed.firebaseConfig === 'object') ? parsed.firebaseConfig : null,
+            shareCode: typeof parsed.shareCode === 'string' ? parsed.shareCode : null
+        };
+    } catch (e) {
+        return { enabled: false, firebaseConfig: null, shareCode: null };
+    }
+}
+
+function persistShareConfig() {
+    try { localStorage.setItem(SHARE_CONFIG_KEY, JSON.stringify(shareConfig)); } catch (e) {}
+}
+
+function genShareCode() {
+    if (window.crypto && crypto.getRandomValues) {
+        const bytes = new Uint8Array(10);
+        crypto.getRandomValues(bytes);
+        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    return 'sc-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+
+function openShareModal() {
+    shareEnabledCheckboxEl.checked = shareConfig.enabled;
+    shareFirebaseConfigInputEl.value = shareConfig.firebaseConfig ? JSON.stringify(shareConfig.firebaseConfig, null, 2) : '';
+    shareCodeDisplayEl.value = shareConfig.shareCode || '';
+    shareStatusEl.textContent = '';
+    shareModalOverlayEl.classList.add('open');
+}
+
+function closeShareModal() {
+    shareModalOverlayEl.classList.remove('open');
+}
+
+function generateNewShareCode() {
+    shareCodeDisplayEl.value = genShareCode();
+}
+
+function copyShareCode() {
+    const code = shareCodeDisplayEl.value.trim();
+    if (!code) { showToast('共有コードがまだありません（先に生成してください）'); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code)
+            .then(() => showToast('共有コードをコピーしました'))
+            .catch(() => showToast('コピーに失敗しました。手動で選択してください'));
+    } else {
+        shareCodeDisplayEl.select();
+        showToast('自動コピーに未対応のため、手動で選択してください');
+    }
+}
+
+function saveShareSettings() {
+    const enabled = shareEnabledCheckboxEl.checked;
+    const configText = shareFirebaseConfigInputEl.value.trim();
+    const codeVal = shareCodeDisplayEl.value.trim();
+
+    if (enabled) {
+        if (!configText) { showToast('Firebase設定を貼り付けてください'); return; }
+        let parsedConfig;
+        try {
+            parsedConfig = JSON.parse(configText);
+        } catch (e) {
+            showToast('Firebase設定のJSON形式が正しくありません'); return;
+        }
+        if (!parsedConfig || typeof parsedConfig !== 'object' || !parsedConfig.apiKey || !parsedConfig.projectId) {
+            showToast('Firebase設定にapiKey・projectIdが見当たりません'); return;
+        }
+        const code = codeVal || genShareCode();
+        shareCodeDisplayEl.value = code;
+        shareConfig = { enabled: true, firebaseConfig: parsedConfig, shareCode: code };
+    } else {
+        shareConfig = { enabled: false, firebaseConfig: shareConfig.firebaseConfig, shareCode: shareConfig.shareCode || codeVal || null };
+    }
+
+    persistShareConfig();
+    shareSdk = null;
+    closeShareModal();
+    showToast(enabled ? '共有をオンにしました' : '共有をオフにしました');
+    if (enabled) pushShareSummary();
+}
+
+async function ensureShareSdk() {
+    if (!shareConfig.enabled || !shareConfig.firebaseConfig || !shareConfig.shareCode) return null;
+    if (shareSdk) return shareSdk;
+    try {
+        const [appMod, storeMod] = await Promise.all([
+            import(/* webpackIgnore: true */ `https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app.js`),
+            import(/* webpackIgnore: true */ `https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-firestore.js`)
+        ]);
+        const app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(shareConfig.firebaseConfig);
+        shareSdk = {
+            db: storeMod.getFirestore(app),
+            doc: storeMod.doc,
+            setDoc: storeMod.setDoc
+        };
+        return shareSdk;
+    } catch (e) {
+        console.error('Firebase SDKの読み込みに失敗しました:', e);
+        return null;
+    }
+}
+
+function getSubjectMinutesBreakdown(dateStrs) {
+    const totals = {};
+    dateStrs.forEach(ds => {
+        getDaySessions(ds).forEach(s => {
+            const subject = s.subject || 'そのほか';
+            totals[subject] = (totals[subject] || 0) + (Number(s.minutes) || 0);
+        });
+    });
+    return Object.keys(totals)
+        .map(subject => ({ subject, minutes: totals[subject] }))
+        .sort((a, b) => b.minutes - a.minutes);
+}
+
+function computeShareSummary() {
+    const goal = settings.dailyGoalMinutes || 0;
+    const today = todayStr();
+    const todayTotal = getDayTotalMinutes(today);
+    const todaySubjects = getSubjectMinutesBreakdown([today]);
+
+    const last7Days = [];
+    const last7DateStrs = [];
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() - i);
+        const ds = dateStrFromDate(d);
+        last7Days.push({ date: ds, minutes: getDayTotalMinutes(ds) });
+        last7DateStrs.push(ds);
+    }
+    const weekSubjects = getSubjectMinutesBreakdown(last7DateStrs);
+    const weekTotalMinutes = last7Days.reduce((sum, x) => sum + x.minutes, 0);
+    const weekGoalMinutes = goal * 7;
+    const weekAchievementRate = weekGoalMinutes > 0 ? Math.round((weekTotalMinutes / weekGoalMinutes) * 100) : 0;
+    const { current, best } = computeStreak();
+
+    return {
+        updatedAt: new Date().toISOString(),
+        dailyGoalMinutes: goal,
+        todayTotalMinutes: todayTotal,
+        todayAchieved: goal > 0 && todayTotal >= goal,
+        todaySubjects: todaySubjects,
+        last7Days: last7Days,
+        weekTotalMinutes: weekTotalMinutes,
+        weekGoalMinutes: weekGoalMinutes,
+        weekAchievementRate: weekAchievementRate,
+        weekSubjects: weekSubjects,
+        currentStreak: current,
+        bestStreak: best
+    };
+}
+
+function updateShareStatus(text, isError) {
+    if (!shareStatusEl) return;
+    shareStatusEl.textContent = text;
+    shareStatusEl.style.color = isError ? 'var(--danger-hover)' : 'var(--text-muted)';
+}
+
+function pushShareSummary() {
+    if (!shareConfig.enabled) return;
+    clearTimeout(shareWriteDebounceTimer);
+    shareWriteDebounceTimer = setTimeout(async () => {
+        const sdk = await ensureShareSdk();
+        if (!sdk) {
+            updateShareStatus('送信に失敗しました（Firebase設定をご確認ください）', true);
+            return;
+        }
+        try {
+            const ref = sdk.doc(sdk.db, 'studylog_shared', shareConfig.shareCode);
+            await sdk.setDoc(ref, computeShareSummary(), { merge: true });
+            updateShareStatus('保護者へ送信しました: ' + new Date().toLocaleTimeString('ja-JP'));
+        } catch (e) {
+            console.error('共有データの送信に失敗しました:', e);
+            updateShareStatus('送信に失敗しました（ネットワークやルール設定をご確認ください）', true);
+        }
+    }, 1500);
+}
+
+/* ==========================================================================
+ * PWA: Service Worker登録
+ * ========================================================================== */
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(e => console.error('SW registration failed:', e));
+    }
+}
+
+/* ==========================================================================
+ * 描画まとめ
+ * ========================================================================== */
+function refreshAll() {
+    renderSubjectBar();
+    renderEntryList();
+    renderSessionList();
+    renderGoalProgress();
+    renderWeeklySummary();
+    renderStreak();
+}
+
+/* ==========================================================================
+ * 初期化
+ * ========================================================================== */
+window.addEventListener('load', function() {
+    try {
+        setTheme(localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light');
+    } catch (e) {
+        console.error('テーマのロードに失敗しました:', e);
+    }
+
+    allData = loadAllData();
+    settings = loadSettings();
+    shareConfig = loadShareConfig();
+    currentDate = todayStr();
+    dateTriggerEl.textContent = currentDate;
+
+    renderSubjectPicker();
+    renderMinutesPicker();
+    resetSessionForm();
+    refreshAll();
+    registerServiceWorker();
+    pushShareSummary();
+});
+</script>
+</body>
+</html>
