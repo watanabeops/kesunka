@@ -8,11 +8,12 @@
 // 古いバージョンを表示し続けてしまう（activateイベントで「名前が変わった
 // 古いキャッシュ」だけを破棄する仕組みのため）。
 
-const CACHE_NAME = 'kesunka-cache-v1.0.4';
+const CACHE_NAME = 'kesunka-cache-v1.0.7';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
+  './icons/apple-touch-icon.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-512-maskable.png'
