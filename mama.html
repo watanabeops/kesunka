@@ -58,6 +58,13 @@
         受け取っても例外にはならず、従来どおりの表示を維持する。今日の記録一覧の
         位置には、送信側の更新を促す案内文を出す。
 
+    [v1.0.7] (Daily Detail Fallback Notice)
+      - 日ごとの一覧で、受け取ったデータに科目内訳（subjects）が含まれていない場合に
+        「お子さんのKESUNKAを最新版で開き直すと、日ごとの科目と時間もここに
+        表示されます」という案内を一覧の下に出すようにした。
+        v1.0.6では、この状態だと時間だけが並び、科目が出ない理由が画面から
+        分からなかった（表示機能そのものはv1.0.6で入っている）。
+
     ============================================================================
 -->
 <html lang="ja">
@@ -496,6 +503,13 @@
         font-weight: normal;
     }
 
+    .day-list-note {
+        font-size: 12px;
+        line-height: 1.7;
+        color: var(--text-muted);
+        padding: 12px 2px 2px;
+    }
+
     .day-row-subjects {
         display: flex;
         flex-wrap: wrap;
@@ -614,7 +628,7 @@
   <rect fill="#fff" x="815.03" y="911.62" width="37.65" height="80.26" transform="translate(1999.9023 1443.1596) rotate(154.0752)"/>
   <circle fill="#f8b94f" cx="647.33" cy="694.84" r="18.5"/>
   <circle fill="#f8b94f" cx="667.92" cy="753.29" r="18.5"/>
-</svg><span class="version-badge">kesunka mama v.1.0.6</span></h1>
+</svg><span class="version-badge">kesunka mama v.1.0.7</span></h1>
         <div class="header-controls">
             <div class="settings-trigger" id="settingsTrigger" onclick="showSetup()">⚙️ 設定</div>
             <div class="theme-control" onclick="toggleTheme()">
@@ -975,12 +989,15 @@ function renderTodaySessions(el, sessions, hasAnyToday) {
 }
 
 // 日ごとの内訳（直近7日）。新しい日が上に来るよう逆順で並べる。
+// 各日の subjects は KESUNKA v1.0.9 以降が送信する項目のため、
+// それより前のバージョンから共有されたデータには含まれない（時間のみの表示になる）。
 function renderDayList(el, days, todayDateStr) {
     if (!Array.isArray(days) || days.length === 0) {
         el.innerHTML = '';
         return;
     }
-    el.innerHTML = days.slice().reverse().map(d => {
+    const hasSubjectData = days.some(d => Array.isArray(d.subjects));
+    const rows = days.slice().reverse().map(d => {
         const minutes = Number(d.minutes) || 0;
         const isToday = d.date === todayDateStr;
         const subjects = Array.isArray(d.subjects) ? d.subjects : [];
@@ -996,6 +1013,12 @@ function renderDayList(el, days, todayDateStr) {
                 ${chips ? `<span class="day-row-subjects">${chips}</span>` : ''}
             </div>`;
     }).join('');
+
+    const note = hasSubjectData
+        ? ''
+        : '<div class="day-list-note">お子さんのKESUNKAを最新版で開き直すと、日ごとの科目と時間もここに表示されます。</div>';
+
+    el.innerHTML = rows + note;
 }
 
 function renderSummary(data) {
