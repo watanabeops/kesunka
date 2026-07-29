@@ -161,13 +161,29 @@
           読み込みで最新に切り替わること、その後はCACHE_NAMEを触らなくても
           更新が届くこと、サーバーを停止してもオフラインで起動できることを確認。
 
+    [v1.0.9] (Share: Daily Detail & Today's Notes)
+      変更内容:
+        - 保護者への共有データを2点拡張した。
+          (1) last7Days の各日に、その日の科目別内訳（subjects）と目標達成
+              （achieved）を追加。これまでは日ごとの合計分数のみだった。
+          (2) 今日の記録一覧（todaySessions: 科目・時間・メモ）を追加。
+        - これに伴い、v0.2.0から続いていた「メモは共有しない」方針を変更した。
+          共有対象になるのは今日のメモのみで、昨日より前のメモは送信しない
+          （last7Days にはメモを含めない）。
+        - 共有をオンにする画面の説明文を実態に合わせて更新。
+          「メモなど、科目名以外の詳細は送信されません」という記載は、
+          今日のメモが送信されるようになったため誤りになるので書き換えた。
+        - この変更は送信側の対応が必要なため、共有中の端末でKESUNKAを一度開く
+          までは、保護者側に新しい項目が表示されない（KESUNKA MAMA側は、
+          項目が無い古いデータを受け取っても従来どおり表示できるようにしてある）。
+
     ============================================================================
 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>KESUNKA v.1.0.8</title>
+<title>KESUNKA v.1.0.9</title>
 
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#3498db">
@@ -1310,7 +1326,7 @@
   <rect fill="#fff" x="815.03" y="911.62" width="37.65" height="80.26" transform="translate(1999.9023 1443.1596) rotate(154.0752)"/>
   <circle fill="#f8b94f" cx="647.33" cy="694.84" r="18.5"/>
   <circle fill="#f8b94f" cx="667.92" cy="753.29" r="18.5"/>
-</svg><span class="version-badge">kesunka v1.0.8</span></h1>
+</svg><span class="version-badge">kesunka v1.0.9</span></h1>
     <div class="header-controls">
         <div class="contribution-trigger" id="shareTrigger" onclick="openShareModal()">
             <span>👪</span> <span>共有</span>
@@ -1328,8 +1344,10 @@
             <button class="contribution-close-btn" onclick="closeShareModal()">✕</button>
         </div>
         <div class="contribution-summary">
-            保護者が別のブラウザで「今日/週の合計時間・科目別の内訳・目標達成率・連続記録」を
-            確認できるようにします。メモなど、科目名以外の詳細は送信されません。
+            保護者が別のブラウザで「今日/週の合計時間・科目別の内訳・目標達成率・連続記録」と、
+            直近7日間の日ごとの学習時間・科目内訳を確認できるようにします。
+            <strong>今日の記録は、メモの内容もそのまま保護者に表示されます。</strong>
+            昨日より前のメモは送信されません。
         </div>
 
         <label class="share-field-label">
@@ -2678,6 +2696,14 @@ function computeShareSummary() {
     const todayTotal = getDayTotalMinutes(today);
     const todaySubjects = getSubjectMinutesBreakdown([today]);
 
+    // 今日の記録は、科目・時間に加えてメモも共有する。
+    // 過去6日分はメモを含めず、日ごとの合計時間と科目内訳のみを共有する。
+    const todaySessions = getDaySessions(today).map(s => ({
+        subject: s.subject || 'そのほか',
+        minutes: Number(s.minutes) || 0,
+        note: typeof s.note === 'string' ? s.note : ''
+    }));
+
     const last7Days = [];
     const last7DateStrs = [];
     for (let i = 6; i >= 0; i--) {
@@ -2685,7 +2711,13 @@ function computeShareSummary() {
         d.setHours(0, 0, 0, 0);
         d.setDate(d.getDate() - i);
         const ds = dateStrFromDate(d);
-        last7Days.push({ date: ds, minutes: getDayTotalMinutes(ds) });
+        const dayMinutes = getDayTotalMinutes(ds);
+        last7Days.push({
+            date: ds,
+            minutes: dayMinutes,
+            achieved: goal > 0 && dayMinutes >= goal,
+            subjects: getSubjectMinutesBreakdown([ds])
+        });
         last7DateStrs.push(ds);
     }
     const weekSubjects = getSubjectMinutesBreakdown(last7DateStrs);
@@ -2700,6 +2732,7 @@ function computeShareSummary() {
         todayTotalMinutes: todayTotal,
         todayAchieved: goal > 0 && todayTotal >= goal,
         todaySubjects: todaySubjects,
+        todaySessions: todaySessions,
         last7Days: last7Days,
         weekTotalMinutes: weekTotalMinutes,
         weekGoalMinutes: weekGoalMinutes,

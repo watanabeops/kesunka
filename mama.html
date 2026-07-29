@@ -48,6 +48,16 @@
         差し替えた。SVGは<style>のクラス定義を廃して各要素に属性を直接記述する
         方針で最適化済み（本体アプリと同一のデータを使用）。
 
+    [v1.0.6] (Daily Detail & Today's Notes)
+      - 「今日の学習時間」パネルに、今日の記録一覧（科目・時間・メモ）を追加。
+        メモは改行をそのまま表示し、長文でも折り返す。
+      - 「直近7日間の学習時間」パネルの棒グラフの下に、日ごとの一覧を追加。
+        新しい日が上に来る並びで、日付・曜日・合計時間・目標達成・科目内訳を表示する。
+        これまで日ごとの内容が分かるのは当日だけだったが、1週間分を遡れるようにした。
+      - どちらもKESUNKA v1.0.9以降が送信する項目を使う。項目が無い古いデータを
+        受け取っても例外にはならず、従来どおりの表示を維持する。今日の記録一覧の
+        位置には、送信側の更新を促す案内文を出す。
+
     ============================================================================
 -->
 <html lang="ja">
@@ -405,6 +415,94 @@
         color: var(--text-muted);
     }
 
+    /* 今日の記録一覧（科目・時間・メモ） */
+    .session-list {
+        margin-top: 16px;
+        border-top: 1px solid var(--border-color);
+        padding-top: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .session-list:empty {
+        display: none;
+    }
+
+    .session-item-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .session-item-minutes {
+        font-size: 13px;
+        font-weight: bold;
+        color: var(--text-muted);
+    }
+
+    .session-item-note {
+        margin-top: 6px;
+        margin-left: 2px;
+        font-size: 13px;
+        line-height: 1.7;
+        color: var(--text-main);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        border-left: 3px solid var(--border-color);
+        padding-left: 10px;
+    }
+
+    /* 日ごとの内訳（直近7日） */
+    .day-list {
+        margin-top: 18px;
+        border-top: 1px solid var(--border-color);
+    }
+
+    .day-row {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 12px 2px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .day-row.is-today {
+        background: var(--bg-color);
+        margin: 0 -8px;
+        padding-left: 10px;
+        padding-right: 10px;
+        border-radius: 8px;
+    }
+
+    .day-row-date {
+        font-size: 13px;
+        font-weight: bold;
+        color: var(--text-main);
+        min-width: 92px;
+    }
+
+    .day-row-minutes {
+        font-size: 13px;
+        font-weight: bold;
+        color: var(--text-main);
+        min-width: 56px;
+    }
+
+    .day-row-minutes.is-zero {
+        color: var(--text-muted);
+        font-weight: normal;
+    }
+
+    .day-row-subjects {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        flex: 1 1 100%;
+    }
+
     .subject-bar-row {
         display: flex;
         align-items: center;
@@ -516,7 +614,7 @@
   <rect fill="#fff" x="815.03" y="911.62" width="37.65" height="80.26" transform="translate(1999.9023 1443.1596) rotate(154.0752)"/>
   <circle fill="#f8b94f" cx="647.33" cy="694.84" r="18.5"/>
   <circle fill="#f8b94f" cx="667.92" cy="753.29" r="18.5"/>
-</svg><span class="version-badge">kesunka mama v.1.0.5</span></h1>
+</svg><span class="version-badge">kesunka mama v.1.0.6</span></h1>
         <div class="header-controls">
             <div class="settings-trigger" id="settingsTrigger" onclick="showSetup()">⚙️ 設定</div>
             <div class="theme-control" onclick="toggleTheme()">
@@ -559,6 +657,7 @@
                 <div class="sub-number" id="todaySub">目標未設定</div>
                 <div class="progress-bar"><div class="progress-fill" id="todayFill"></div></div>
                 <div class="subject-breakdown" id="todaySubjectBreakdown"></div>
+                <div class="session-list" id="todaySessionList"></div>
             </div>
 
             <div class="grid-two">
@@ -580,6 +679,7 @@
             <div class="panel">
                 <div class="card-title">直近7日間の学習時間</div>
                 <div class="chart-wrap" id="chartWrap"></div>
+                <div class="day-list" id="dayList"></div>
             </div>
 
             <div class="panel">
@@ -615,6 +715,8 @@ const streakBigEl = document.getElementById('streakBig');
 const streakBestEl = document.getElementById('streakBest');
 const chartWrapEl = document.getElementById('chartWrap');
 const todaySubjectBreakdownEl = document.getElementById('todaySubjectBreakdown');
+const todaySessionListEl = document.getElementById('todaySessionList');
+const dayListEl = document.getElementById('dayList');
 const weekSubjectBreakdownEl = document.getElementById('weekSubjectBreakdown');
 const updatedAtEl = document.getElementById('updatedAt');
 
@@ -833,6 +935,69 @@ function renderSubjectBars(el, subjects) {
  * ========================================================================== */
 const WEEKDAYS_JA = ['日', '月', '火', '水', '木', '金', '土'];
 
+// 「2026-07-29」→「7/29（火）」。日付として解釈できない場合は元の文字列を返す。
+function formatDateLabel(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T00:00:00');
+    if (isNaN(d.getTime())) return dateStr;
+    return `${d.getMonth() + 1}/${d.getDate()}（${WEEKDAYS_JA[d.getDay()]}）`;
+}
+
+// 今日の記録一覧（科目・時間・メモ）。
+// todaySessions は KESUNKA v1.0.9 以降が送信する項目のため、
+// それより前のバージョンから共有されたデータには含まれない。
+function renderTodaySessions(el, sessions, hasAnyToday) {
+    if (!Array.isArray(sessions)) {
+        el.innerHTML = hasAnyToday
+            ? '<div class="subject-breakdown-empty">お子さんのKESUNKAを最新版で開き直すと、ここに今日の記録とメモが表示されます。</div>'
+            : '';
+        return;
+    }
+    if (sessions.length === 0) {
+        el.innerHTML = '';
+        return;
+    }
+    el.innerHTML = sessions.map(s => {
+        const subject = s.subject || 'そのほか';
+        const minutes = Number(s.minutes) || 0;
+        const note = typeof s.note === 'string' ? s.note.trim() : '';
+        return `
+            <div class="session-item">
+                <div class="session-item-head">
+                    <span class="subject-chip-mini" style="--tag-dot-color:${subjectColor(subject)}">
+                        <span class="subject-dot"></span>${escapeHtml(subject)}
+                    </span>
+                    <span class="session-item-minutes">${minutes}分</span>
+                </div>
+                ${note ? `<div class="session-item-note">${escapeHtml(note)}</div>` : ''}
+            </div>`;
+    }).join('');
+}
+
+// 日ごとの内訳（直近7日）。新しい日が上に来るよう逆順で並べる。
+function renderDayList(el, days, todayDateStr) {
+    if (!Array.isArray(days) || days.length === 0) {
+        el.innerHTML = '';
+        return;
+    }
+    el.innerHTML = days.slice().reverse().map(d => {
+        const minutes = Number(d.minutes) || 0;
+        const isToday = d.date === todayDateStr;
+        const subjects = Array.isArray(d.subjects) ? d.subjects : [];
+        const chips = subjects.map(s => `
+            <span class="subject-chip-mini" style="--tag-dot-color:${subjectColor(s.subject)}">
+                <span class="subject-dot"></span>${escapeHtml(s.subject)} ${Number(s.minutes) || 0}分
+            </span>`).join('');
+        return `
+            <div class="day-row${isToday ? ' is-today' : ''}">
+                <span class="day-row-date">${isToday ? '今日 ' : ''}${formatDateLabel(d.date)}</span>
+                <span class="day-row-minutes${minutes === 0 ? ' is-zero' : ''}">${minutes}分</span>
+                ${d.achieved ? '<span class="achieved-badge">達成</span>' : ''}
+                ${chips ? `<span class="day-row-subjects">${chips}</span>` : ''}
+            </div>`;
+    }).join('');
+}
+
 function renderSummary(data) {
     const goal = Number(data.dailyGoalMinutes) || 0;
     const todayTotal = Number(data.todayTotalMinutes) || 0;
@@ -843,6 +1008,7 @@ function renderSummary(data) {
     todayFillEl.style.width = todayPct + '%';
     todayFillEl.classList.toggle('achieved', !!data.todayAchieved);
     renderSubjectBreakdown(todaySubjectBreakdownEl, data.todaySubjects);
+    renderTodaySessions(todaySessionListEl, data.todaySessions, todayTotal > 0);
 
     const weekTotal = Number(data.weekTotalMinutes) || 0;
     const weekGoal = Number(data.weekGoalMinutes) || 0;
@@ -879,6 +1045,8 @@ function renderSummary(data) {
                 <div class="chart-label">${label}</div>
             </div>`;
     }).join('');
+
+    renderDayList(dayListEl, days, todayDateStr);
 
     if (data.updatedAt) {
         try {
