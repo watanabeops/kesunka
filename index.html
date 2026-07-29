@@ -134,11 +134,32 @@
           角丸ありの192をiPhoneに使うとiOS側の丸めと二重になるため分離した。
         - ファビコンとヘッダーのインライン表示は v1.0.6 のまま（背景透過）。
           背景色と角丸はホーム画面アイコンにのみ適用する方針。
-        - sw.js の CACHE_NAME を kesunka-cache-v1.0.4 から v1.0.7 に更新。
+        - sw.js の CACHE_NAME を kesunka-cache-v1.0.4 から v1.0.7 に更新（※v1.0.8で
+          この手当て自体が不要になった）。
           この値を変えないと、インストール済みの端末はキャッシュ優先の仕組みで
           古いHTML・古いアイコンを表示し続ける（sw.js自体の中身が変わらないと
           サービスワーカーの更新検知も走らないため、ブラウザのキャッシュ削除
           だけでは直らない）。あわせて APP_SHELL に apple-touch-icon.png を追加。
+
+    [v1.0.8] (Service Worker Cache Strategy)
+      変更内容:
+        - sw.js のキャッシュ方針を変更し、更新のたびに CACHE_NAME を手で上げる
+          必要をなくした。v1.0.7までは全リクエストがキャッシュ優先だったため、
+          値の更新を忘れるとインストール済みの端末が古いHTMLを表示し続けていた。
+        - ページ遷移（request.mode === 'navigate'）はネットワーク優先に変更。
+          取得できたらそれを表示しつつキャッシュも更新し、オフライン時のみ
+          キャッシュを使う。HTMLを更新すれば次に開いた時点で必ず反映される。
+        - それ以外（manifest・アイコン）はキャッシュ優先で即座に表示しつつ、
+          裏でネットワークから取り直してキャッシュを更新する
+          （stale-while-revalidate）。アイコン差し替えも次回起動時に反映される。
+        - 同一オリジン以外（FirebaseのSDK・Firestoreへの通信）は
+          サービスワーカーを素通しし、キャッシュ対象から明示的に除外した。
+        - CACHE_NAME は kesunka-cache-v2 に変更（旧キャッシュの一掃のため）。
+          以降は、キャッシュを全部捨ててやり直したいとき以外は変更不要。
+        - ローカルのHTTPサーバーで動作確認済み。旧sw.jsで「サーバー上は新しい
+          のに画面は古いまま」を再現したうえで、新sw.jsに差し替えると次回の
+          読み込みで最新に切り替わること、その後はCACHE_NAMEを触らなくても
+          更新が届くこと、サーバーを停止してもオフラインで起動できることを確認。
 
     ============================================================================
 -->
@@ -146,7 +167,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>KESUNKA v.1.0.7</title>
+<title>KESUNKA v.1.0.8</title>
 
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#3498db">
@@ -1289,7 +1310,7 @@
   <rect fill="#fff" x="815.03" y="911.62" width="37.65" height="80.26" transform="translate(1999.9023 1443.1596) rotate(154.0752)"/>
   <circle fill="#f8b94f" cx="647.33" cy="694.84" r="18.5"/>
   <circle fill="#f8b94f" cx="667.92" cy="753.29" r="18.5"/>
-</svg><span class="version-badge">kesunka v1.0.7</span></h1>
+</svg><span class="version-badge">kesunka v1.0.8</span></h1>
     <div class="header-controls">
         <div class="contribution-trigger" id="shareTrigger" onclick="openShareModal()">
             <span>👪</span> <span>共有</span>
