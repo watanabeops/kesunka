@@ -28,14 +28,27 @@ KESUNKAの「👪 共有」機能は、Firebase（Googleの無料クラウドサ
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // 保護者向けの要約（KESUNKA MAMAが読む）
     match /studylog_shared/{shareCode} {
+      allow read, write: if true;
+    }
+    // 学習ログの本体（バックアップ・復元用）
+    match /studylog_logs/{backupKey} {
+      allow read, write: if true;
+    }
+    // 件数が減る書き込みの直前に退避される、ひとつ前の版
+    match /studylog_logs_prev/{backupKey} {
       allow read, write: if true;
     }
   }
 }
 ```
 
-**重要**: このルールは `studylog_shared` コレクションに限定していますが、認証は行わないため、共有コードを知っている（推測できる）人は誰でも読み書きできてしまいます。KESUNKA側で生成される共有コードは十分長いランダム文字列（推測はほぼ不可能）ですが、パスワードと同じように扱い、むやみに公開しないでください。
+**`studylog_logs` と `studylog_logs_prev` は KESUNKA v1.1.0 で追加されました。** 以前のルールのままだとバックアップの書き込みが権限エラーで失敗するので、上のルールに置き換えてください。
+
+**重要**: このルールは3つのコレクションに限定していますが、認証は行わないため、キーを知っている（推測できる）人は誰でも読み書きできてしまいます。KESUNKA側で生成されるキーは十分長いランダム文字列（推測はほぼ不可能）ですが、パスワードと同じように扱い、むやみに公開しないでください。
+
+なお `studylog_logs` には**学習ログの全履歴（すべてのメモを含む）**が入ります。保護者向けの要約（`studylog_shared`）より内容が多いことに注意してください。保護者にキーを渡すと、保護者側の画面には要約しか出ませんが、キーがあれば全履歴を読むことは技術的に可能です。
 
 ## 4. Webアプリを登録し、設定情報を取得する
 

@@ -65,6 +65,14 @@
         v1.0.6では、この状態だと時間だけが並び、科目が出ない理由が画面から
         分からなかった（表示機能そのものはv1.0.6で入っている）。
 
+    [v1.0.8] (Backup Key Notice)
+      - KESUNKA v1.1.0でクラウドバックアップが入り、共有コードが学習ログの
+        復元キーも兼ねるようになった。設定画面に、このコードが復元キーでもあり
+        控えを残す必要がある旨の説明を追加した。保護者側の端末が、キーの
+        控えが残るもう1つの場所になる。
+      - 本体アプリのボタン名変更（「👪 共有」→「☁️ バックアップ」）に合わせて
+        設定画面の案内文を修正。
+
     ============================================================================
 -->
 <html lang="ja">
@@ -628,7 +636,7 @@
   <rect fill="#fff" x="815.03" y="911.62" width="37.65" height="80.26" transform="translate(1999.9023 1443.1596) rotate(154.0752)"/>
   <circle fill="#f8b94f" cx="647.33" cy="694.84" r="18.5"/>
   <circle fill="#f8b94f" cx="667.92" cy="753.29" r="18.5"/>
-</svg><span class="version-badge">kesunka mama v.1.0.7</span></h1>
+</svg><span class="version-badge">kesunka mama v.1.0.8</span></h1>
         <div class="header-controls">
             <div class="settings-trigger" id="settingsTrigger" onclick="showSetup()">⚙️ 設定</div>
             <div class="theme-control" onclick="toggleTheme()">
@@ -639,7 +647,7 @@
 
     <div class="panel setup-panel" id="setupPanel">
         <div class="setup-note">
-            KESUNKAアプリ側の「👪 共有」設定画面で表示されるFirebase設定と共有コードを、
+            KESUNKAアプリ側の「☁️ バックアップ」設定画面で表示されるFirebase設定と共有コードを、
             そのままここに貼り付けてください。ここで入力した内容はこのブラウザにのみ保存され、
             送信・記録はされません。
         </div>
@@ -647,6 +655,10 @@
         <textarea id="setupFirebaseConfigInput" rows="6" placeholder='{"apiKey": "...", "projectId": "...", ...}'></textarea>
         <label>共有コード</label>
         <input type="text" id="setupShareCodeInput" placeholder="KESUNKA側で発行されたコード">
+        <div class="setup-note">
+            このコードは、お子さんの学習ログをクラウドから復元するための<strong>バックアップキー</strong>でもあります。
+            お子さん側の端末が初期化されたときに記録を戻せる唯一の手がかりなので、控えを残しておいてください。
+        </div>
         <div class="setup-actions">
             <button class="btn" onclick="connectFromSetup()">接続する</button>
             <button class="btn btn-outline hidden" id="setupCancelBtn" onclick="hideSetup()">キャンセル</button>

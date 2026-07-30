@@ -177,13 +177,49 @@
           までは、保護者側に新しい項目が表示されない（KESUNKA MAMA側は、
           項目が無い古いデータを受け取っても従来どおり表示できるようにしてある）。
 
+    [v1.1.0] (Cloud Backup / 設計上の欠陥の修正)
+      背景:
+        v1.0.9まで、学習ログの保存先は端末のlocalStorageだけだった。Firebaseを
+        使っていたにもかかわらず、それは保護者向け要約の送信にしか使っておらず、
+        記録そのものはどこにも控えが無かった。この構成では、
+        ホーム画面のWebアプリを削除する / 端末を初期化する /
+        ブラウザのサイトデータを消す、のいずれかで全履歴が失われる。
+        実際にホーム画面から削除した際に全履歴が失われた。設計上の欠陥だった。
+
+      変更内容:
+        - 学習ログの正本をFirestoreに置いた（studylog_logs/{バックアップキー}）。
+          localStorageは表示用のキャッシュとして残す。データ本体は
+          JSON文字列1フィールドに入れる（フィールド数制限を避けるため）。
+        - 起動時にクラウドと突き合わせる。この端末が0件でクラウドに記録があれば
+          自動で復元する。双方にデータがある場合は updatedAt が新しい側を採用する。
+        - 【上書き事故の防止】クラウドへの書き込み前に必ずクラウドを読み、
+          (1) この端末が0件でクラウドに記録がある場合は書き込まず、復元を促す
+          (2) 件数が減る書き込みは、直前の版を studylog_logs_prev/{キー} に
+              退避してから行う
+          という手順を踏む。空のデータで控えを消してしまう経路を無くした。
+        - 「クラウドから復元」を追加。キーを入れ直せば別端末・再インストール後も
+          全履歴が戻る。件数を示した確認ダイアログを出す。
+        - バックアップと保護者への共有を別のスイッチに分離した。
+          バックアップだけオンにすれば、メモを保護者に見せずに記録を保全できる。
+          v1.0.9以前の設定は、Firebase設定済みならバックアップ有効として移行する。
+        - ヘッダー下の警告を、記録が失われうる状態のあいだ出し続ける。
+          未設定のとき（この端末にしか記録が無い）と、設定済みでも
+          クラウドへの保存に失敗しているときの2つを、別の文面で表示する。
+          後者は、モーダルを開かないと失敗に気づけない状態を避けるためのもの。
+        - 共有コードを「バックアップキー」と位置づけ直した。控えを残すよう明記。
+          キーを失うと復元できないため、コピー操作を目立たせている。
+        - ヘッダーのボタンを「👪 共有」から「☁️ バックアップ」に変更。
+        - Firestoreのセキュリティルールに studylog_logs と studylog_logs_prev を
+          追加する必要がある（docs/firebase-setup-guide.md を更新済み）。
+          ルールを更新しないとバックアップの書き込みが権限エラーになる。
+
     ============================================================================
 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>KESUNKA v.1.0.9</title>
+<title>KESUNKA v.1.1.0</title>
 
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#3498db">
@@ -1257,6 +1293,28 @@
         flex-shrink: 0;
     }
 
+    .hidden { display: none !important; }
+
+    /* バックアップ未設定の警告。記録がこの端末にしかない状態を知らせる */
+    .cloud-warning {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin: 0 0 16px;
+        padding: 12px 14px;
+        border: 1px solid var(--danger-color);
+        border-radius: 10px;
+        background: var(--panel-bg);
+        color: var(--text-main);
+        font-size: 13px;
+        line-height: 1.6;
+        cursor: pointer;
+    }
+
+    .cloud-warning-icon {
+        flex-shrink: 0;
+    }
+
     .trumbo-toast {
         position: fixed;
         bottom: max(20px, env(safe-area-inset-bottom));
@@ -1326,10 +1384,10 @@
   <rect fill="#fff" x="815.03" y="911.62" width="37.65" height="80.26" transform="translate(1999.9023 1443.1596) rotate(154.0752)"/>
   <circle fill="#f8b94f" cx="647.33" cy="694.84" r="18.5"/>
   <circle fill="#f8b94f" cx="667.92" cy="753.29" r="18.5"/>
-</svg><span class="version-badge">kesunka v1.0.9</span></h1>
+</svg><span class="version-badge">kesunka v1.1.0</span></h1>
     <div class="header-controls">
         <div class="contribution-trigger" id="shareTrigger" onclick="openShareModal()">
-            <span>👪</span> <span>共有</span>
+            <span>☁️</span> <span>バックアップ</span>
         </div>
         <div class="theme-control" onclick="toggleTheme()">
             <span id="themeIcon">🌙</span> <span id="themeLabel">ダークモード</span>
@@ -1337,42 +1395,61 @@
     </div>
 </header>
 
+<div class="cloud-warning hidden" id="cloudWarning" onclick="openShareModal()">
+    <span class="cloud-warning-icon">⚠️</span>
+    <span id="cloudWarningText"></span>
+</div>
+
 <div class="contribution-modal-overlay" id="shareModalOverlay" onclick="closeShareModal()">
     <div class="contribution-modal share-modal" onclick="event.stopPropagation()">
         <div class="contribution-modal-header">
-            <h2>保護者への共有</h2>
+            <h2>バックアップと共有</h2>
             <button class="contribution-close-btn" onclick="closeShareModal()">✕</button>
         </div>
-        <div class="contribution-summary">
-            保護者が別のブラウザで「今日/週の合計時間・科目別の内訳・目標達成率・連続記録」と、
-            直近7日間の日ごとの学習時間・科目内訳を確認できるようにします。
-            <strong>今日の記録は、メモの内容もそのまま保護者に表示されます。</strong>
-            昨日より前のメモは送信されません。
-        </div>
 
-        <label class="share-field-label">
-            <input type="checkbox" id="shareEnabledCheckbox"> 共有をオンにする
-        </label>
-
-        <div class="session-form-field" style="margin-top:12px;">
+        <div class="session-form-field" style="margin-top:4px;">
             <label>Firebase設定（Webアプリの構成情報をJSONのまま貼り付け）</label>
             <textarea id="shareFirebaseConfigInput" rows="5" placeholder='{"apiKey": "...", "projectId": "...", ...}'></textarea>
         </div>
 
         <div class="session-form-row" style="margin-top:10px;">
             <div class="session-form-field">
-                <label>共有コード（保護者側にも同じものを伝えてください）</label>
+                <label>バックアップキー（保護者への共有コードと共通）</label>
                 <input type="text" id="shareCodeDisplay" placeholder="未生成">
             </div>
         </div>
-        <div class="session-form-actions" style="justify-content:flex-start;margin-bottom:14px;">
-            <button class="btn btn-outline" onclick="generateNewShareCode()">新しいコードを生成</button>
+        <div class="session-form-actions" style="justify-content:flex-start;margin-bottom:6px;">
+            <button class="btn btn-outline" onclick="generateNewShareCode()">新しいキーを生成</button>
             <button class="btn btn-outline" onclick="copyShareCode()">コピー</button>
         </div>
+        <div class="contribution-summary" style="margin-bottom:16px;">
+            <strong>このキーは必ず控えを残してください。</strong>
+            端末を初期化したり、ホーム画面から削除したりしても、
+            このキーがあれば記録を元に戻せます。キーを失うと戻せません。
+        </div>
 
-        <div id="shareStatus" class="save-status"></div>
+        <label class="share-field-label">
+            <input type="checkbox" id="cloudBackupCheckbox"> クラウドに記録を保存する（バックアップ）
+        </label>
+        <div class="contribution-summary" style="margin-top:6px;margin-bottom:16px;">
+            学習ログの全履歴をFirestoreに保存します。この端末のデータが消えても、
+            同じキーを入力すれば元に戻せます。オフにすると、記録はこの端末の中だけになります。
+        </div>
+
+        <label class="share-field-label">
+            <input type="checkbox" id="shareEnabledCheckbox"> 保護者に共有する
+        </label>
+        <div class="contribution-summary" style="margin-top:6px;">
+            保護者が別のブラウザで「今日/週の合計時間・科目別の内訳・目標達成率・連続記録」と、
+            直近7日間の日ごとの学習時間・科目内訳を確認できるようにします。
+            <strong>今日の記録は、メモの内容もそのまま保護者に表示されます。</strong>
+            昨日より前のメモは送信されません。バックアップとは別の要約データを送ります。
+        </div>
+
+        <div id="shareStatus" class="save-status" style="margin-top:14px;"></div>
 
         <div class="session-form-actions" style="margin-top:10px;">
+            <button class="btn btn-outline" onclick="restoreFromCloud()">クラウドから復元</button>
             <button class="btn btn-submit" onclick="saveShareSettings()">保存</button>
         </div>
     </div>
@@ -1500,9 +1577,11 @@
 <script>
 const THEME_KEY = 'studylog_theme';
 const DATA_KEY = 'studylog_data_v1';
+const DATA_UPDATED_AT_KEY = 'studylog_data_updated_at_v1';
 const SETTINGS_KEY = 'studylog_settings_v1';
 const SHARE_CONFIG_KEY = 'studylog_share_config_v1';
 const FIREBASE_SDK_VERSION = '12.15.0';
+const APP_VERSION = 'v1.1.0';
 
 const dateTriggerEl = document.getElementById('dateTrigger');
 const calendarPopupEl = document.getElementById('calendarPopup');
@@ -1533,6 +1612,9 @@ const shareModalOverlayEl = document.getElementById('shareModalOverlay');
 const shareEnabledCheckboxEl = document.getElementById('shareEnabledCheckbox');
 const shareFirebaseConfigInputEl = document.getElementById('shareFirebaseConfigInput');
 const shareCodeDisplayEl = document.getElementById('shareCodeDisplay');
+const cloudBackupCheckboxEl = document.getElementById('cloudBackupCheckbox');
+const cloudWarningEl = document.getElementById('cloudWarning');
+const cloudWarningTextEl = document.getElementById('cloudWarningText');
 const shareStatusEl = document.getElementById('shareStatus');
 
 let allData = {};
@@ -1549,6 +1631,8 @@ let currentNavIdx = -1;
 let shareConfig = { enabled: false, firebaseConfig: null, shareCode: null };
 let shareSdk = null;
 let shareWriteDebounceTimer = null;
+let cloudWriteDebounceTimer = null;
+let cloudSyncFailed = false;
 
 function todayStr() { return dateStrFromDate(new Date()); }
 
@@ -1617,12 +1701,31 @@ function loadAllData() {
 function persistAllData() {
     try {
         localStorage.setItem(DATA_KEY, JSON.stringify(allData));
+        localStorage.setItem(DATA_UPDATED_AT_KEY, new Date().toISOString());
         return true;
     } catch (e) {
         console.error('localStorageへの保存に失敗しました:', e);
         showToast('保存に失敗しました。ブラウザの容量をご確認ください。');
         return false;
     }
+}
+
+// この端末のデータが最後に変わった時刻。クラウドとどちらが新しいかの判定に使う。
+function loadDataUpdatedAt() {
+    try {
+        return localStorage.getItem(DATA_UPDATED_AT_KEY) || '';
+    } catch (e) {
+        return '';
+    }
+}
+
+// 記録されているセッションの総数。クラウドを空で上書きしないための判定に使う。
+function countSessions(dataObj) {
+    if (!dataObj || typeof dataObj !== 'object') return 0;
+    return Object.keys(dataObj).reduce((sum, ds) => {
+        const day = dataObj[ds];
+        return sum + (day && Array.isArray(day.sessions) ? day.sessions.length : 0);
+    }, 0);
 }
 
 function loadSettings() {
@@ -2015,7 +2118,7 @@ function removeSession(id) {
     deleteSession(currentDate, id);
     if (editingSessionId === id) resetSessionForm();
     refreshAll();
-    pushShareSummary();
+    syncAfterChange();
     showToast('削除しました');
 }
 
@@ -2090,7 +2193,7 @@ function submitSessionForm() {
 
     resetSessionForm();
     refreshAll();
-    pushShareSummary();
+    syncAfterChange();
 }
 
 /* ==========================================================================
@@ -2131,7 +2234,7 @@ function saveGoal() {
     goalPopoverEl.classList.remove('open');
     renderGoalProgress();
     renderWeeklySummary();
-    pushShareSummary();
+    syncAfterChange();
     showToast('目標を更新しました');
 }
 
@@ -2304,7 +2407,7 @@ function handleJsonImportFile(event) {
         if (ok) {
             resetSessionForm();
             refreshAll();
-            pushShareSummary();
+            syncAfterChange();
             const msg = invalidCount > 0
                 ? `${importCount}日分を読み込みました（${invalidCount}件は形式不正のためスキップ）`
                 : `${importCount}日分の記録を読み込みました`;
@@ -2570,18 +2673,31 @@ function showToast(message) {
  * 書き込みは行わない。
  * ========================================================================== */
 function loadShareConfig() {
+    const empty = { enabled: false, backupEnabled: false, firebaseConfig: null, shareCode: null };
     try {
         const raw = localStorage.getItem(SHARE_CONFIG_KEY);
-        if (!raw) return { enabled: false, firebaseConfig: null, shareCode: null };
+        if (!raw) return empty;
         const parsed = JSON.parse(raw);
+        const firebaseConfig = (parsed.firebaseConfig && typeof parsed.firebaseConfig === 'object') ? parsed.firebaseConfig : null;
+        const shareCode = typeof parsed.shareCode === 'string' ? parsed.shareCode : null;
         return {
             enabled: !!parsed.enabled,
-            firebaseConfig: (parsed.firebaseConfig && typeof parsed.firebaseConfig === 'object') ? parsed.firebaseConfig : null,
-            shareCode: typeof parsed.shareCode === 'string' ? parsed.shareCode : null
+            // v1.1.0より前の設定にはbackupEnabledが無い。Firebaseの設定が済んでいる端末は
+            // バックアップを有効として扱う（記録を失わないことを優先する）。
+            backupEnabled: typeof parsed.backupEnabled === 'boolean'
+                ? parsed.backupEnabled
+                : !!(firebaseConfig && shareCode),
+            firebaseConfig: firebaseConfig,
+            shareCode: shareCode
         };
     } catch (e) {
-        return { enabled: false, firebaseConfig: null, shareCode: null };
+        return empty;
     }
+}
+
+// クラウドへの読み書きが可能な状態か（保護者への共有のオン/オフとは独立）。
+function isCloudBackupReady() {
+    return !!(shareConfig.backupEnabled && shareConfig.firebaseConfig && shareConfig.shareCode);
 }
 
 function persistShareConfig() {
@@ -2599,6 +2715,7 @@ function genShareCode() {
 
 function openShareModal() {
     shareEnabledCheckboxEl.checked = shareConfig.enabled;
+    cloudBackupCheckboxEl.checked = shareConfig.backupEnabled;
     shareFirebaseConfigInputEl.value = shareConfig.firebaseConfig ? JSON.stringify(shareConfig.firebaseConfig, null, 2) : '';
     shareCodeDisplayEl.value = shareConfig.shareCode || '';
     shareStatusEl.textContent = '';
@@ -2628,10 +2745,12 @@ function copyShareCode() {
 
 function saveShareSettings() {
     const enabled = shareEnabledCheckboxEl.checked;
+    const backupEnabled = cloudBackupCheckboxEl.checked;
     const configText = shareFirebaseConfigInputEl.value.trim();
     const codeVal = shareCodeDisplayEl.value.trim();
 
-    if (enabled) {
+    // バックアップと共有は、どちらもFirebase設定とキーを必要とする。
+    if (enabled || backupEnabled) {
         if (!configText) { showToast('Firebase設定を貼り付けてください'); return; }
         let parsedConfig;
         try {
@@ -2644,20 +2763,32 @@ function saveShareSettings() {
         }
         const code = codeVal || genShareCode();
         shareCodeDisplayEl.value = code;
-        shareConfig = { enabled: true, firebaseConfig: parsedConfig, shareCode: code };
+        shareConfig = { enabled: enabled, backupEnabled: backupEnabled, firebaseConfig: parsedConfig, shareCode: code };
     } else {
-        shareConfig = { enabled: false, firebaseConfig: shareConfig.firebaseConfig, shareCode: shareConfig.shareCode || codeVal || null };
+        shareConfig = {
+            enabled: false,
+            backupEnabled: false,
+            firebaseConfig: shareConfig.firebaseConfig,
+            shareCode: shareConfig.shareCode || codeVal || null
+        };
     }
 
     persistShareConfig();
     shareSdk = null;
     closeShareModal();
-    showToast(enabled ? '共有をオンにしました' : '共有をオフにしました');
-    if (enabled) pushShareSummary();
+    renderCloudWarning();
+
+    if (backupEnabled) {
+        showToast(enabled ? 'バックアップと共有をオンにしました' : 'バックアップをオンにしました');
+    } else {
+        showToast(enabled ? '共有をオンにしました（バックアップはオフ）' : 'オフにしました');
+    }
+    syncAfterChange();
 }
 
 async function ensureShareSdk() {
-    if (!shareConfig.enabled || !shareConfig.firebaseConfig || !shareConfig.shareCode) return null;
+    if (!shareConfig.firebaseConfig || !shareConfig.shareCode) return null;
+    if (!shareConfig.enabled && !shareConfig.backupEnabled) return null;
     if (shareSdk) return shareSdk;
     try {
         const [appMod, storeMod] = await Promise.all([
@@ -2668,7 +2799,8 @@ async function ensureShareSdk() {
         shareSdk = {
             db: storeMod.getFirestore(app),
             doc: storeMod.doc,
-            setDoc: storeMod.setDoc
+            setDoc: storeMod.setDoc,
+            getDoc: storeMod.getDoc
         };
         return shareSdk;
     } catch (e) {
@@ -2743,6 +2875,224 @@ function computeShareSummary() {
     };
 }
 
+/* ==========================================================================
+ * クラウドバックアップ（記録の正本）
+ *
+ * 学習ログをFirestoreの studylog_logs/{バックアップキー} に保存する。
+ * localStorageは表示用のキャッシュとして残すが、正本はこちらに置く。
+ * 端末の初期化、ホーム画面のWebアプリ削除、ブラウザのデータ削除で
+ * localStorageが消えても、キーを入力すれば全履歴を復元できる。
+ *
+ * 【上書き事故の防止】
+ * この端末に記録が無い状態でクラウドへ書き込むと、クラウド側の記録も
+ * 消える。それを防ぐため、書き込みの前に必ずクラウドを読み、
+ *   - この端末が0件でクラウドに記録がある → 書き込まず、復元を促す
+ *   - 件数が減る書き込み → 直前の版を studylog_logs_prev/{キー} へ退避
+ * という手順を踏む。
+ * ========================================================================== */
+const CLOUD_LOG_COLLECTION = 'studylog_logs';
+const CLOUD_LOG_PREV_COLLECTION = 'studylog_logs_prev';
+
+function buildCloudLogPayload() {
+    return {
+        // データ本体は1つの文字列にまとめる（Firestoreのフィールド数制限を避けるため）
+        payload: JSON.stringify({ data: allData, settings: settings }),
+        sessionCount: countSessions(allData),
+        dayCount: Object.keys(allData).length,
+        updatedAt: loadDataUpdatedAt() || new Date().toISOString(),
+        appVersion: APP_VERSION
+    };
+}
+
+// クラウドの記録を読む。存在しなければ null。
+async function readCloudLog(sdk) {
+    const ref = sdk.doc(sdk.db, CLOUD_LOG_COLLECTION, shareConfig.shareCode);
+    const snap = await sdk.getDoc(ref);
+    if (!snap.exists()) return null;
+    const raw = snap.data() || {};
+    let parsed = null;
+    try {
+        parsed = raw.payload ? JSON.parse(raw.payload) : null;
+    } catch (e) {
+        console.error('クラウドの記録の解析に失敗しました:', e);
+        return null;
+    }
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+        data: (parsed.data && typeof parsed.data === 'object') ? parsed.data : {},
+        settings: (parsed.settings && typeof parsed.settings === 'object') ? parsed.settings : null,
+        sessionCount: Number(raw.sessionCount) || countSessions(parsed.data),
+        updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : ''
+    };
+}
+
+// クラウドの内容をこの端末に反映する。
+function applyCloudLog(remote) {
+    allData = remote.data || {};
+    if (remote.settings && Number.isFinite(remote.settings.dailyGoalMinutes)) {
+        settings.dailyGoalMinutes = remote.settings.dailyGoalMinutes;
+        persistSettings();
+    }
+    try {
+        localStorage.setItem(DATA_KEY, JSON.stringify(allData));
+        localStorage.setItem(DATA_UPDATED_AT_KEY, remote.updatedAt || new Date().toISOString());
+    } catch (e) {
+        console.error('復元したデータの保存に失敗しました:', e);
+    }
+    currentDate = todayStr();
+    refreshAll();
+}
+
+function pushCloudLog() {
+    if (!isCloudBackupReady()) return;
+    clearTimeout(cloudWriteDebounceTimer);
+    cloudWriteDebounceTimer = setTimeout(async () => {
+        const sdk = await ensureShareSdk();
+        if (!sdk) {
+            cloudSyncFailed = true; renderCloudWarning();
+            updateShareStatus('バックアップに失敗しました（Firebase設定をご確認ください）', true);
+            return;
+        }
+        try {
+            const next = buildCloudLogPayload();
+            let remote = null;
+            try {
+                remote = await readCloudLog(sdk);
+            } catch (e) {
+                console.error('バックアップ前の読み込みに失敗しました:', e);
+                cloudSyncFailed = true; renderCloudWarning();
+                updateShareStatus('バックアップを中止しました（クラウドの確認に失敗）', true);
+                return;
+            }
+
+            // この端末が0件でクラウドに記録がある場合は、絶対に上書きしない。
+            if (remote && remote.sessionCount > 0 && next.sessionCount === 0) {
+                updateShareStatus('この端末に記録がないため、クラウドを上書きしませんでした。「クラウドから復元」を実行してください。', true);
+                return;
+            }
+
+            // 件数が減る書き込みは、直前の版を退避してから行う。
+            if (remote && next.sessionCount < remote.sessionCount) {
+                try {
+                    await sdk.setDoc(
+                        sdk.doc(sdk.db, CLOUD_LOG_PREV_COLLECTION, shareConfig.shareCode),
+                        {
+                            payload: JSON.stringify({ data: remote.data, settings: remote.settings }),
+                            sessionCount: remote.sessionCount,
+                            updatedAt: remote.updatedAt,
+                            savedAt: new Date().toISOString()
+                        }
+                    );
+                } catch (e) {
+                    console.error('直前の版の退避に失敗しました:', e);
+                    cloudSyncFailed = true; renderCloudWarning();
+                    updateShareStatus('バックアップを中止しました（退避に失敗）', true);
+                    return;
+                }
+            }
+
+            await sdk.setDoc(sdk.doc(sdk.db, CLOUD_LOG_COLLECTION, shareConfig.shareCode), next);
+            cloudSyncFailed = false;
+            updateShareStatus('クラウドに保存しました: ' + new Date().toLocaleTimeString('ja-JP') + `（${next.sessionCount}件）`);
+            renderCloudWarning();
+        } catch (e) {
+            console.error('クラウドへの保存に失敗しました:', e);
+            cloudSyncFailed = true; renderCloudWarning();
+            updateShareStatus('クラウドへの保存に失敗しました（ネットワークやルール設定をご確認ください）', true);
+        }
+    }, 1500);
+}
+
+// 起動時にクラウドと突き合わせる。
+// この端末が空でクラウドに記録があれば復元し、
+// クラウドの方が新しければそれを採用、この端末の方が新しければ送る。
+async function syncCloudLogOnStart() {
+    if (!isCloudBackupReady()) return;
+    const sdk = await ensureShareSdk();
+    if (!sdk) return;
+    let remote = null;
+    try {
+        remote = await readCloudLog(sdk);
+    } catch (e) {
+        console.error('クラウドの記録の読み込みに失敗しました:', e);
+        cloudSyncFailed = true;
+        renderCloudWarning();
+        return;
+    }
+
+    const localCount = countSessions(allData);
+    if (!remote) {
+        if (localCount > 0) pushCloudLog();
+        return;
+    }
+    if (localCount === 0 && remote.sessionCount > 0) {
+        applyCloudLog(remote);
+        showToast(`クラウドから記録を復元しました（${remote.sessionCount}件）`);
+        return;
+    }
+    const localUpdatedAt = loadDataUpdatedAt();
+    if (remote.updatedAt && remote.updatedAt > localUpdatedAt) {
+        applyCloudLog(remote);
+        showToast('クラウドの記録を読み込みました');
+    } else if (localUpdatedAt && (!remote.updatedAt || localUpdatedAt > remote.updatedAt)) {
+        pushCloudLog();
+    }
+}
+
+// 手動復元。クラウドの内容でこの端末を置き換える。
+async function restoreFromCloud() {
+    if (!isCloudBackupReady()) {
+        showToast('先にFirebase設定とバックアップキーを保存してください');
+        return;
+    }
+    const sdk = await ensureShareSdk();
+    if (!sdk) { updateShareStatus('復元に失敗しました（Firebase設定をご確認ください）', true); return; }
+    let remote = null;
+    try {
+        remote = await readCloudLog(sdk);
+    } catch (e) {
+        console.error('クラウドの記録の読み込みに失敗しました:', e);
+        updateShareStatus('復元に失敗しました（ネットワークやルール設定をご確認ください）', true);
+        return;
+    }
+    if (!remote || remote.sessionCount === 0) {
+        updateShareStatus('このキーで保存された記録が見つかりませんでした', true);
+        return;
+    }
+    const localCount = countSessions(allData);
+    const message = localCount > 0
+        ? `クラウドの記録（${remote.sessionCount}件）でこの端末の記録（${localCount}件）を置き換えます。よろしいですか？`
+        : `クラウドから記録（${remote.sessionCount}件）を復元します。よろしいですか？`;
+    if (!confirm(message)) return;
+    applyCloudLog(remote);
+    updateShareStatus(`復元しました（${remote.sessionCount}件）`);
+    showToast('クラウドから復元しました');
+}
+
+// 変更後の同期。クラウドへの保存と、保護者への要約送信をまとめて行う。
+function syncAfterChange() {
+    pushCloudLog();
+    pushShareSummary();
+}
+
+// ヘッダー下の警告。記録が失われうる状態のあいだ出し続ける。
+//   未設定           … この端末にしか記録が無い
+//   設定済みで失敗中 … クラウドに保存できていない（未設定と同じ危険度）
+function renderCloudWarning() {
+    if (!cloudWarningEl) return;
+    if (!isCloudBackupReady()) {
+        cloudWarningTextEl.textContent = '記録がこの端末の中にしかありません。ホーム画面からの削除や端末の初期化で消えます。クラウドへのバックアップを設定してください。';
+        cloudWarningEl.classList.remove('hidden');
+        return;
+    }
+    if (cloudSyncFailed) {
+        cloudWarningTextEl.textContent = 'クラウドに保存できていません。いまの記録はこの端末の中にしかありません。通信状況とFirebaseの設定・ルールをご確認ください。';
+        cloudWarningEl.classList.remove('hidden');
+        return;
+    }
+    cloudWarningEl.classList.add('hidden');
+}
+
 function updateShareStatus(text, isError) {
     if (!shareStatusEl) return;
     shareStatusEl.textContent = text;
@@ -2811,7 +3161,13 @@ window.addEventListener('load', function() {
     resetSessionForm();
     refreshAll();
     registerServiceWorker();
-    pushShareSummary();
+    renderCloudWarning();
+
+    // クラウドと突き合わせる。この端末が空でクラウドに記録があれば復元する。
+    // 完了後に、保護者への要約を送る（復元後の内容で送るため順番が重要）。
+    syncCloudLogOnStart()
+        .catch(e => console.error('クラウド同期に失敗しました:', e))
+        .then(() => pushShareSummary());
 });
 </script>
 </body>
