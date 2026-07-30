@@ -1,0 +1,17 @@
+{
+  "name": "KESUNKA MAMA - 学習ログの閲覧",
+  "short_name": "KESUNKA MAMA",
+  "description": "お子さんのKESUNKAから共有された学習時間の要約を閲覧する（閲覧専用）",
+  "start_url": "./mama.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f1f5f9",
+  "theme_color": "#3498db",
+  "lang": "ja",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
