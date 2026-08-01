@@ -213,13 +213,53 @@
           追加する必要がある（docs/firebase-setup-guide.md を更新済み）。
           ルールを更新しないとバックアップの書き込みが権限エラーになる。
 
+    [v1.1.1] (「活動記録」を「学びの日々」へ)
+      変更内容:
+        - ヒートマップ機能の呼び名を「活動記録」から「学びの日々」に変更した。
+          業務報告のような硬さを避け、アプリの語りかけに合わせるため
+          （Guevara v2.0.9 で先に実施した変更の反映。docs/handoff-leaf-rename.md）。
+            ボタン    📊 活動記録        → 🌱 学びの日々
+            見出し    活動記録（過去1年） → 学びの日々（過去1年）
+            サマリー  過去1年間で N 日 学習 → 過去1年で N 日 学びました
+        - 絵文字を📊（棒グラフ＝集計表の顔つき）から🌱（葉）に変更。ヒートマップの
+          基準色（#2ecc71）と色が揃い、画面全体がやわらかくなる。
+          この機能はGitHubのcontribution graph（通称「草」）が由来だが、
+          いまの日本語では「草」は笑いの意味が主流のため、ラベルには使わない。
+          葉のマークで由来だけ残している。
+        - 空のセルのツールチップは「記録なし」のまま据え置いた。「学んでいない日」は
+          勉強アプリでは咎めるように読まれる恐れがあり、「お休み」は記録が無いだけの
+          日に休んだと断定してしまうため。ログの状態を述べる表現にとどめている。
+        - 内部の識別子（contributionSummary / .contribution-cell /
+          renderContributionGraph など）は contribution* のまま変更していない。
+          その旨をコード内コメントに明記した。
+        - 変更履歴の過去のエントリに出てくる「活動記録」は、当時の事実の記録なので
+          書き換えていない。
+
+      あわせて修正した表示の不具合:
+        - 一覧の各行が潰れて科目タグが見切れていた。#entryList は縦のflexコンテナで、
+          .entry-row が既定の flex-shrink: 1 のままだったため、記録が増えて一覧が
+          あふれると全行が min-height: 44px まで縮められていた。flex-shrink: 0 を
+          指定して修正。記録が少ないうちは起きないため、これまで表面化していなかった。
+        - ヒートマップ右端の月ラベルが「8」「月」に折り返し、グリッドに重なっていた。
+          .contribution-month-label に white-space: nowrap を指定して修正。
+
+      あわせて調整した表示:
+        - 「学びの日々」のサマリーの合計を、分から時間+分に変更した
+          （合計19455分 → 合計324時間15分）。1年分の合計は桁が大きく読み取りづらい
+          ため。formatDurationLong() を追加し、端数が0分のときは時間だけを出す。
+          1日・1週間の数字は桁が小さいので「N分」のまま変更していない。
+        - 凡例の「学習時間の四分位で判定」を「学習時間の多さで5段階」に変更。
+          統計用語を避け、他の文言と同じ硬さに揃えるため。
+        - セッションの操作ボタンから絵文字を外した（✎ 編集 → 編集、🗑 削除 → 削除）。
+          他のボタン（目標を編集・今日・保存）が語のみで、揃っていなかったため。
+
     ============================================================================
 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>KESUNKA v.1.1.0</title>
+<title>KESUNKA v.1.1.1</title>
 
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#3498db">
@@ -512,6 +552,8 @@
         top: 0;
         font-size: 10px;
         color: var(--text-muted);
+        /* 右端の月ラベルが「8」「月」に折り返してグリッドに重なるのを防ぐ */
+        white-space: nowrap;
     }
 
     .contribution-weekday-labels {
@@ -736,6 +778,9 @@
         font-size: 13px;
         border-bottom: 1px solid var(--border-color);
         min-height: 44px;
+        /* #entryListは縦のflexコンテナ。既定のflex-shrinkのままだと、一覧が
+           あふれたときに各行が min-height まで潰され、科目タグが見切れる */
+        flex-shrink: 0;
     }
 
     .entry-row:hover { background: var(--bg-color); }
@@ -1384,7 +1429,7 @@
   <rect fill="#fff" x="815.03" y="911.62" width="37.65" height="80.26" transform="translate(1999.9023 1443.1596) rotate(154.0752)"/>
   <circle fill="#f8b94f" cx="647.33" cy="694.84" r="18.5"/>
   <circle fill="#f8b94f" cx="667.92" cy="753.29" r="18.5"/>
-</svg><span class="version-badge">kesunka v1.1.0</span></h1>
+</svg><span class="version-badge">kesunka v1.1.1</span></h1>
     <div class="header-controls">
         <div class="contribution-trigger" id="shareTrigger" onclick="openShareModal()">
             <span>☁️</span> <span>バックアップ</span>
@@ -1458,7 +1503,7 @@
 <div class="contribution-modal-overlay" id="contributionModalOverlay" onclick="closeContributionModal()">
     <div class="contribution-modal" onclick="event.stopPropagation()">
         <div class="contribution-modal-header">
-            <h2>活動記録（過去1年）</h2>
+            <h2>学びの日々（過去1年）</h2>
             <button class="contribution-close-btn" onclick="closeContributionModal()">✕</button>
         </div>
         <div class="contribution-summary" id="contributionSummary"></div>
@@ -1479,7 +1524,7 @@
             <span class="contribution-cell" id="legendCell2"></span>
             <span class="contribution-cell" id="legendCell3"></span>
             <span class="contribution-cell" id="legendCell4"></span>
-            <span>多（学習時間の四分位で判定）</span>
+            <span>多（学習時間の多さで5段階）</span>
         </div>
     </div>
 </div>
@@ -1530,7 +1575,7 @@
                 <span class="weekly-summary" id="weeklySummary"></span>
                 <span class="streak-badge" id="streakBadge">🔥 0日</span>
                 <div class="contribution-trigger contribution-trigger-goal" onclick="openContributionModal()">
-                    <span>📊</span> <span>活動記録</span>
+                    <span>🌱</span> <span>学びの日々</span>
                 </div>
                 <button class="goal-edit-btn" onclick="toggleGoalPopover(event)">目標を編集</button>
                 <div class="goal-popover" id="goalPopover" onclick="event.stopPropagation()">
@@ -1581,7 +1626,7 @@ const DATA_UPDATED_AT_KEY = 'studylog_data_updated_at_v1';
 const SETTINGS_KEY = 'studylog_settings_v1';
 const SHARE_CONFIG_KEY = 'studylog_share_config_v1';
 const FIREBASE_SDK_VERSION = '12.15.0';
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.1.1';
 
 const dateTriggerEl = document.getElementById('dateTrigger');
 const calendarPopupEl = document.getElementById('calendarPopup');
@@ -2091,8 +2136,8 @@ function renderSessionList() {
             </div>
             ${s.note ? `<div class="session-note">${escapeHtml(s.note)}</div>` : ''}
             <div class="session-card-actions">
-                <button class="session-action-btn" onclick="editSession('${s.id}')">✎ 編集</button>
-                <button class="session-action-btn danger" onclick="removeSession('${s.id}')">🗑 削除</button>
+                <button class="session-action-btn" onclick="editSession('${s.id}')">編集</button>
+                <button class="session-action-btn danger" onclick="removeSession('${s.id}')">削除</button>
             </div>
         </div>
     `).join('');
@@ -2199,6 +2244,18 @@ function submitSessionForm() {
 /* ==========================================================================
  * 目標・進捗
  * ========================================================================== */
+
+// 長期間の合計を読みやすく表す。1日・1週間の数字は桁が小さいのでそのまま「N分」で
+// 表示するが、1年分の合計は「19455分」のように桁が大きくなり読み取りづらいため、
+// こちらは時間+分にする（端数が0分のときは時間だけ）。
+function formatDurationLong(minutes) {
+    const m = Math.max(0, Math.round(Number(minutes) || 0));
+    if (m < 60) return `${m}分`;
+    const hours = Math.floor(m / 60);
+    const rest = m % 60;
+    return rest === 0 ? `${hours}時間` : `${hours}時間${rest}分`;
+}
+
 function renderGoalProgress() {
     const total = getDayTotalMinutes(currentDate);
     const goal = settings.dailyGoalMinutes || 0;
@@ -2421,7 +2478,11 @@ function handleJsonImportFile(event) {
 }
 
 /* ==========================================================================
- * 活動記録（GitHub風ヒートマップ）：合計学習時間（分）ベース
+ * 学びの日々（GitHub風ヒートマップ）：合計学習時間（分）ベース
+ *
+ * 内部の識別子（contributionSummary / .contribution-cell / renderContributionGraph
+ * など）は contribution* のまま残している。GitHubのcontribution graph由来の名前で、
+ * 表示名の変更のために40箇所近い改名をする必要はないと判断した（Guevaraも同じ方針）。
  * ========================================================================== */
 const MONTH_LABELS_JA = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
 const CONTRIBUTION_BASE_COLOR = '#2ecc71';
@@ -2524,7 +2585,7 @@ function renderContributionGraph() {
 
     const writtenDays = counts.filter(c => c > 0).length;
     const totalMinutes = counts.reduce((a, b) => a + b, 0);
-    document.getElementById('contributionSummary').textContent = `過去1年間で ${writtenDays} 日 学習（合計${totalMinutes}分）`;
+    document.getElementById('contributionSummary').textContent = `過去1年で ${writtenDays} 日 学びました（合計${formatDurationLong(totalMinutes)}）`;
 
     for (let level = 0; level <= 4; level++) {
         const el = document.getElementById(`legendCell${level}`);
