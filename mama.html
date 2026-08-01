@@ -89,6 +89,15 @@
       - アイコンの絵柄は本体アプリと共通のため、両方を同じ端末のホーム画面に
         置くと見分けがつかない。分ける場合は別の絵柄が必要。
 
+    [v1.1.0] (「学びの日々」への追随)
+      - 本体アプリ v1.1.1 の「活動記録」→「学びの日々」に合わせ、日別ビューの
+        見出しを「直近7日間の学習時間」から「🌱 学びの日々（直近7日）」に変更した。
+        MAMA側には「活動記録」も📊も無かったため、対応するのは同じ性格を持つ
+        この日別ビュー（棒グラフ＋日ごとの一覧）と判断した。
+        期間が本体（過去1年）と異なるため、括弧で明示している。
+      - 他の見出し（今日の学習時間・今週・連続記録・科目別の学習時間）は
+        素の語のままにしてある。絵文字を付けたのはこの1つだけ。
+
     ============================================================================
 -->
 <html lang="ja">
@@ -662,7 +671,7 @@
   <rect fill="#fff" x="815.03" y="911.62" width="37.65" height="80.26" transform="translate(1999.9023 1443.1596) rotate(154.0752)"/>
   <circle fill="#f8b94f" cx="647.33" cy="694.84" r="18.5"/>
   <circle fill="#f8b94f" cx="667.92" cy="753.29" r="18.5"/>
-</svg><span class="version-badge">kesunka mama v.1.0.9</span></h1>
+</svg><span class="version-badge">kesunka mama v.1.1.0</span></h1>
         <div class="header-controls">
             <div class="settings-trigger" id="settingsTrigger" onclick="showSetup()">⚙️ 設定</div>
             <div class="theme-control" onclick="toggleTheme()">
@@ -729,7 +738,7 @@
             </div>
 
             <div class="panel">
-                <div class="card-title">直近7日間の学習時間</div>
+                <div class="card-title">🌱 学びの日々（直近7日）</div>
                 <div class="chart-wrap" id="chartWrap"></div>
                 <div class="day-list" id="dayList"></div>
             </div>
