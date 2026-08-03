@@ -98,6 +98,25 @@
       - 他の見出し（今日の学習時間・今週・連続記録・科目別の学習時間）は
         素の語のままにしてある。絵文字を付けたのはこの1つだけ。
 
+    [v1.1.1] (「今日の学習時間」に前日の数字が出る不具合の修正)
+      - 症状: お子さんが新しい日に記録を追加していないとき、「今日の学習時間」に
+        前日の数字がそのまま「今日」として表示されていた。
+      - 原因: 要約はお子さん側が記録を追加・編集したときにしか送信されない。
+        日付が変わっても記録が無ければ更新されず、Firestoreには前日の要約が残る。
+        todayTotalMinutes などは送信時点の「今日」の数字だが、こちらは日付を
+        検証せずそのまま描画していた。要約にも「いつの今日か」を示す項目が無かった。
+      - 修正: 要約の日付（KESUNKA v1.1.2以降の todayDate、無い場合は last7Days の
+        末尾の日付で代用）とこのブラウザの今日を突き合わせ、一致するときだけ
+        今日の数字として表示する。一致しない場合は数字を出さず、
+        「—」「今日の記録はまだ届いていません」「最後に届いたのは M/D（N分）です。」
+        を表示する。0分と出すと「学んでいない」と読めるが、実際は届いていない
+        だけなので、数字は出さない。
+      - todayDate を持たない古い要約でも last7Days から判定できるため、
+        お子さん側の更新を待たずに直る。
+      - 「今週（直近7日）」と「連続記録」も同様に送信時点の値のままだが、
+        こちらは日付をまたいでも大きく誤解を招かないため今回は変更していない。
+        最終更新の日時はパネル下部に表示されている。
+
     ============================================================================
 -->
 <html lang="ja">
@@ -671,7 +690,7 @@
   <rect fill="#fff" x="815.03" y="911.62" width="37.65" height="80.26" transform="translate(1999.9023 1443.1596) rotate(154.0752)"/>
   <circle fill="#f8b94f" cx="647.33" cy="694.84" r="18.5"/>
   <circle fill="#f8b94f" cx="667.92" cy="753.29" r="18.5"/>
-</svg><span class="version-badge">kesunka mama v.1.1.0</span></h1>
+</svg><span class="version-badge">kesunka mama v.1.1.1</span></h1>
         <div class="header-controls">
             <div class="settings-trigger" id="settingsTrigger" onclick="showSetup()">⚙️ 設定</div>
             <div class="theme-control" onclick="toggleTheme()">
@@ -1038,7 +1057,7 @@ function renderTodaySessions(el, sessions, hasAnyToday) {
 // 日ごとの内訳（直近7日）。新しい日が上に来るよう逆順で並べる。
 // 各日の subjects は KESUNKA v1.0.9 以降が送信する項目のため、
 // それより前のバージョンから共有されたデータには含まれない（時間のみの表示になる）。
-function renderDayList(el, days, todayDateStr) {
+function renderDayList(el, days, today) {
     if (!Array.isArray(days) || days.length === 0) {
         el.innerHTML = '';
         return;
@@ -1046,7 +1065,7 @@ function renderDayList(el, days, todayDateStr) {
     const hasSubjectData = days.some(d => Array.isArray(d.subjects));
     const rows = days.slice().reverse().map(d => {
         const minutes = Number(d.minutes) || 0;
-        const isToday = d.date === todayDateStr;
+        const isToday = d.date === today;
         const subjects = Array.isArray(d.subjects) ? d.subjects : [];
         const chips = subjects.map(s => `
             <span class="subject-chip-mini" style="--tag-dot-color:${subjectColor(s.subject)}">
@@ -1068,17 +1087,51 @@ function renderDayList(el, days, todayDateStr) {
     el.innerHTML = rows + note;
 }
 
+// このブラウザにとっての今日（YYYY-MM-DD）。
+function todayDateStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// 要約の「今日」がどの日付のものかを求める。
+// KESUNKA v1.1.2以降は todayDate が入っている。それより前のデータには無いので、
+// last7Days の最後の日付（送信時点の「今日」）で代用する。
+function getSummaryDate(data) {
+    if (typeof data.todayDate === 'string' && data.todayDate) return data.todayDate;
+    const days = Array.isArray(data.last7Days) ? data.last7Days : [];
+    const last = days[days.length - 1];
+    return last && typeof last.date === 'string' ? last.date : '';
+}
+
 function renderSummary(data) {
     const goal = Number(data.dailyGoalMinutes) || 0;
     const todayTotal = Number(data.todayTotalMinutes) || 0;
     const todayPct = goal > 0 ? Math.min(100, Math.round((todayTotal / goal) * 100)) : (todayTotal > 0 ? 100 : 0);
 
-    todayBigEl.innerHTML = `${todayTotal}分` + (data.todayAchieved ? '<span class="achieved-badge">達成</span>' : '');
-    todaySubEl.textContent = goal > 0 ? `目標 ${goal}分` : '目標未設定';
-    todayFillEl.style.width = todayPct + '%';
-    todayFillEl.classList.toggle('achieved', !!data.todayAchieved);
-    renderSubjectBreakdown(todaySubjectBreakdownEl, data.todaySubjects);
-    renderTodaySessions(todaySessionListEl, data.todaySessions, todayTotal > 0);
+    // 要約は、お子さんが記録を追加・編集したときにしか送信されない。
+    // 日付が変わっても記録が無ければ更新されないため、そのまま描画すると
+    // 前日の数字が「今日」として出てしまう。日付が一致するときだけ今日として扱う。
+    const summaryDate = getSummaryDate(data);
+    const isFromToday = !summaryDate || summaryDate === todayDateStr();
+
+    if (isFromToday) {
+        todayBigEl.innerHTML = `${todayTotal}分` + (data.todayAchieved ? '<span class="achieved-badge">達成</span>' : '');
+        todaySubEl.textContent = goal > 0 ? `目標 ${goal}分` : '目標未設定';
+        todayFillEl.style.width = todayPct + '%';
+        todayFillEl.classList.toggle('achieved', !!data.todayAchieved);
+        renderSubjectBreakdown(todaySubjectBreakdownEl, data.todaySubjects);
+        renderTodaySessions(todaySessionListEl, data.todaySessions, todayTotal > 0);
+    } else {
+        // 0分と出すと「学んでいない」と読めてしまうが、実際は記録が届いていないだけ。
+        // 数字は出さず、最後に届いた日を添える。
+        todayBigEl.textContent = '—';
+        todaySubEl.textContent = '今日の記録はまだ届いていません';
+        todayFillEl.style.width = '0%';
+        todayFillEl.classList.remove('achieved');
+        todaySubjectBreakdownEl.innerHTML =
+            `<div class="subject-breakdown-empty">最後に届いたのは ${escapeHtml(formatDateLabel(summaryDate))}（${todayTotal}分）です。</div>`;
+        todaySessionListEl.innerHTML = '';
+    }
 
     const weekTotal = Number(data.weekTotalMinutes) || 0;
     const weekGoal = Number(data.weekGoalMinutes) || 0;
@@ -1099,13 +1152,12 @@ function renderSummary(data) {
 
     const days = Array.isArray(data.last7Days) ? data.last7Days : [];
     const maxMinutes = Math.max(1, ...days.map(d => Number(d.minutes) || 0));
-    const todayStr = new Date();
-    const todayDateStr = `${todayStr.getFullYear()}-${String(todayStr.getMonth() + 1).padStart(2, '0')}-${String(todayStr.getDate()).padStart(2, '0')}`;
+    const today = todayDateStr();
 
     chartWrapEl.innerHTML = days.map(d => {
         const minutes = Number(d.minutes) || 0;
         const heightPct = Math.max(2, Math.round((minutes / maxMinutes) * 100));
-        const isToday = d.date === todayDateStr;
+        const isToday = d.date === today;
         const dateObj = d.date ? new Date(d.date + 'T00:00:00') : null;
         const label = dateObj ? WEEKDAYS_JA[dateObj.getDay()] : '';
         return `
@@ -1116,7 +1168,7 @@ function renderSummary(data) {
             </div>`;
     }).join('');
 
-    renderDayList(dayListEl, days, todayDateStr);
+    renderDayList(dayListEl, days, today);
 
     if (data.updatedAt) {
         try {

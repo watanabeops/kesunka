@@ -253,13 +253,24 @@
         - セッションの操作ボタンから絵文字を外した（✎ 編集 → 編集、🗑 削除 → 削除）。
           他のボタン（目標を編集・今日・保存）が語のみで、揃っていなかったため。
 
+    [v1.1.2] (共有データに todayDate を追加)
+      変更内容:
+        - 保護者への要約に todayDate（その要約の「今日」が指す日付）を追加した。
+        - 背景: 要約の送信はセッションの追加・編集・削除、目標変更、共有設定の保存で
+          しか起きない。日付が変わってもお子さんが記録を追加しなければ送信されず、
+          Firestoreには前日の要約が残る。todayTotalMinutes などは送信時点の「今日」
+          の数字なので、受け取り側がそのまま描画すると前日の数字が「今日」として
+          表示されてしまう（KESUNKA MAMAで実際に発生した）。
+        - どの日付の要約かを受け取り側が判定できるようにするための項目で、
+          送信の頻度は変えていない。MAMA側の対応はMAMA v1.1.1を参照。
+
     ============================================================================
 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>KESUNKA v.1.1.1</title>
+<title>KESUNKA v.1.1.2</title>
 
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#3498db">
@@ -1429,7 +1440,7 @@
   <rect fill="#fff" x="815.03" y="911.62" width="37.65" height="80.26" transform="translate(1999.9023 1443.1596) rotate(154.0752)"/>
   <circle fill="#f8b94f" cx="647.33" cy="694.84" r="18.5"/>
   <circle fill="#f8b94f" cx="667.92" cy="753.29" r="18.5"/>
-</svg><span class="version-badge">kesunka v1.1.1</span></h1>
+</svg><span class="version-badge">kesunka v1.1.2</span></h1>
     <div class="header-controls">
         <div class="contribution-trigger" id="shareTrigger" onclick="openShareModal()">
             <span>☁️</span> <span>バックアップ</span>
@@ -1626,7 +1637,7 @@ const DATA_UPDATED_AT_KEY = 'studylog_data_updated_at_v1';
 const SETTINGS_KEY = 'studylog_settings_v1';
 const SHARE_CONFIG_KEY = 'studylog_share_config_v1';
 const FIREBASE_SDK_VERSION = '12.15.0';
-const APP_VERSION = 'v1.1.1';
+const APP_VERSION = 'v1.1.2';
 
 const dateTriggerEl = document.getElementById('dateTrigger');
 const calendarPopupEl = document.getElementById('calendarPopup');
@@ -2922,6 +2933,10 @@ function computeShareSummary() {
     return {
         updatedAt: new Date().toISOString(),
         dailyGoalMinutes: goal,
+        // 「今日」がどの日付を指すかを明示する。送信はセッションの追加・編集・削除や
+        // 目標変更でしか起きないため、日付が変わっても記録がなければ要約は更新されず、
+        // 受け取り側は前日の数字を「今日」として表示してしまう。それを防ぐための項目。
+        todayDate: today,
         todayTotalMinutes: todayTotal,
         todayAchieved: goal > 0 && todayTotal >= goal,
         todaySubjects: todaySubjects,
